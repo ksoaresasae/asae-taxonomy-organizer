@@ -1,0 +1,77 @@
+=== ASAE Taxonomy Organizer ===
+Contributors: keithmsoares
+Tags: taxonomy, categories, ai, automation, content organization
+Requires at least: 5.0
+Tested up to: 6.4
+Requires PHP: 7.4
+Stable tag: 0.0.4
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Use AI (OpenAI) or intelligent keyword matching to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
+
+== Installation ==
+
+1. Upload the `asae-taxonomy-organizer` folder to the `/wp-content/plugins/` directory
+2. Activate the plugin through the 'Plugins' menu in WordPress
+3. Navigate to 'ASAE > Taxonomy Organizer' in the admin menu
+4. (Optional) Configure OpenAI settings via the link on the Organizer page
+
+== Frequently Asked Questions ==
+
+= Do I need an OpenAI API key? =
+
+No, the plugin works without an API key using keyword matching. However, AI-powered analysis provides significantly more accurate results. You can get an API key from [platform.openai.com](https://platform.openai.com/api-keys).
+
+= Is my API key secure? =
+
+Your API key is stored in the WordPress database. For production environments with high security requirements, we recommend using environment variables. The key is never exposed in page source and is only transmitted to OpenAI's API.
+
+= What's the difference between Preview Mode and direct processing? =
+
+Preview Mode shows you all suggestions before any changes are saved, allowing you to approve or reject each one. Direct processing saves categorizations automatically based on your confidence threshold setting.
+
+= Can I process large numbers of posts? =
+
+Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
+
+== Changelog ==
+
+= 0.0.4 =
+* Moved admin menu under shared "ASAE" top-level menu (standard ASAE submenu pattern)
+* Added fallback top-level ASAE menu when ASAE Explore plugin is not active
+* OpenAI Settings page is now a hidden page accessible via direct link
+* Added build-zip.php script for WordPress-compatible release packaging
+* Added .gitignore for repository cleanliness
+
+= 0.0.3 =
+* Added dedicated OpenAI Settings admin page
+* Added API key field with show/hide toggle for security
+* Added model selection dropdown (GPT-4o, GPT-4o Mini, GPT-4, GPT-3.5 Turbo)
+* Added connection test button to verify API access
+* Added AI/Keyword matching toggle in main Organizer interface
+* Enhanced rejection workflow with category selection modal
+* Added rejection notes field for AI training feedback
+* Implemented feedback logging system for rejected suggestions
+* Limited Preview Mode to maximum 100 items for performance
+* Disabled Preview Mode when "All Items" is selected (batch mode only)
+
+= 0.0.2 =
+* Added date range picker for filtering content by publication date
+* Added preview mode with individual approve/reject functionality
+* Added confidence threshold slider for auto-saving high-confidence matches
+* Added exclude by existing taxonomy option
+* Added confidence score display for each suggestion (High/Medium/Low)
+* Improved UI with better result display and batch actions
+
+= 0.0.1 =
+* Initial release
+* Basic admin interface
+* Batch processing with WP-Cron
+* AI analyzer with OpenAI support
+* Keyword matching fallback
+
+== Upgrade Notice ==
+
+= 0.0.4 =
+Admin menu now appears under the shared ASAE menu. If ASAE Explore is not active, a fallback ASAE menu is created.

@@ -1,0 +1,724 @@
+/**
+ * ASAE Taxonomy Organizer - Admin Styles
+ * 
+ * This stylesheet provides all the visual styling for the plugin's admin pages.
+ * It follows WordPress admin design patterns while adding custom components for
+ * the approval workflow, confidence indicators, and settings pages.
+ * 
+ * The styles are organized by component:
+ * - Layout (container, sidebar, cards)
+ * - Form elements (toggles, sliders, inputs)
+ * - Results display (items, badges, status indicators)
+ * - Batch status panel
+ * - Modal dialogs
+ * - Settings page specific
+ * - Responsive adjustments
+ * 
+ * @package ASAE_Taxonomy_Organizer
+ * @author Keith M. Soares
+ * @since 0.0.1
+ */
+
+/* =============================================================================
+   Layout - Main Structure
+   ============================================================================= */
+
+.asae-to-wrap {
+    max-width: 1400px;
+}
+
+.asae-to-wrap h1 {
+    margin-bottom: 20px;
+}
+
+.asae-to-container {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.asae-to-main {
+    flex: 1;
+    min-width: 500px;
+}
+
+.asae-to-sidebar {
+    width: 320px;
+    flex-shrink: 0;
+}
+
+/* Card Component - Used throughout the admin */
+.asae-to-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.asae-to-card h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.asae-to-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+/* Status Banner - Shows AI/Keyword mode */
+.asae-to-status-banner {
+    padding: 10px 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.asae-to-status-banner.ai-enabled {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.asae-to-status-banner.keyword-mode {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+
+.asae-to-status-banner .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.asae-to-status-banner a {
+    color: inherit;
+    font-weight: 600;
+}
+
+/* =============================================================================
+   Form Elements
+   ============================================================================= */
+
+.asae-to-form .form-table th {
+    width: 200px;
+    padding-left: 0;
+}
+
+/* Section Headers within forms */
+.asae-to-section-header th {
+    padding-top: 25px !important;
+    padding-bottom: 5px !important;
+}
+
+.asae-to-section-header h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #1d2327;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+/* Date Range Picker */
+.asae-to-date-range {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.asae-to-date-range input[type="date"] {
+    width: 150px;
+}
+
+.asae-to-date-separator {
+    color: #666;
+}
+
+/* Toggle Switch (iOS-style) */
+.asae-to-toggle {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+}
+
+.asae-to-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.asae-to-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+    border-radius: 26px;
+}
+
+.asae-to-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+
+.asae-to-toggle input:checked + .asae-to-toggle-slider {
+    background-color: #2271b1;
+}
+
+.asae-to-toggle input:checked + .asae-to-toggle-slider:before {
+    transform: translateX(24px);
+}
+
+.asae-to-toggle input:focus + .asae-to-toggle-slider {
+    box-shadow: 0 0 1px #2271b1;
+}
+
+.asae-to-toggle input:disabled + .asae-to-toggle-slider {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Range Slider with Value Display */
+.asae-to-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.asae-to-range {
+    width: 200px;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #ddd;
+    border-radius: 3px;
+    outline: none;
+}
+
+.asae-to-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #2271b1;
+    cursor: pointer;
+}
+
+.asae-to-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #2271b1;
+    cursor: pointer;
+    border: none;
+}
+
+.asae-to-range-value {
+    font-weight: 600;
+    color: #2271b1;
+    min-width: 40px;
+}
+
+/* Password Field with Toggle */
+.asae-to-password-field {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.asae-to-password-field input {
+    flex: 1;
+    max-width: 400px;
+}
+
+/* Warning/Note text styles */
+.asae-to-warning {
+    color: #856404 !important;
+}
+
+.asae-to-note {
+    color: #666;
+    font-style: italic;
+}
+
+/* =============================================================================
+   Results Display
+   ============================================================================= */
+
+.asae-to-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.asae-to-results-header h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+#results-actions {
+    display: flex;
+    gap: 8px;
+}
+
+#results-container {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Individual Result Item */
+.result-item-enhanced {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f9f9f9;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    gap: 12px;
+}
+
+.result-item-enhanced .result-checkbox {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+}
+
+.result-item-enhanced .result-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.result-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+}
+
+.result-title {
+    font-weight: 500;
+    color: #1d2327;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.result-date {
+    font-size: 12px;
+    color: #888;
+    flex-shrink: 0;
+    margin-left: 10px;
+}
+
+.result-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.result-category {
+    background: #e5e5e5;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #444;
+}
+
+/* Confidence Badges */
+.confidence-badge {
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.confidence-badge.high,
+.confidence-badge.confidence-high {
+    background: #d4edda;
+    color: #155724;
+}
+
+.confidence-badge.medium,
+.confidence-badge.confidence-medium {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.confidence-badge.low,
+.confidence-badge.confidence-low {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Status Badges */
+.result-status {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+.result-status.saved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.result-status.pending {
+    background: #cce5ff;
+    color: #004085;
+}
+
+.result-status.skipped {
+    background: #e5e5e5;
+    color: #666;
+}
+
+.result-status.dry-run {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.result-item-enhanced .result-actions {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+/* Confidence Legend in Sidebar */
+.confidence-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.confidence-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.confidence-item .confidence-badge {
+    min-width: 60px;
+    text-align: center;
+}
+
+/* =============================================================================
+   Batch Status Panel
+   ============================================================================= */
+
+.batch-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    background: #f9f9f9;
+}
+
+.batch-info {
+    flex: 1;
+    font-size: 13px;
+}
+
+.batch-progress {
+    color: #666;
+    margin-right: 10px;
+}
+
+.batch-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.batch-status.status-pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.batch-status.status-processing {
+    background: #cce5ff;
+    color: #004085;
+}
+
+.batch-status.status-completed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.batch-status.status-cancelled {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.no-batches {
+    color: #666;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+#cancel-all-batches {
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* =============================================================================
+   Modal Dialog (for rejection feedback)
+   ============================================================================= */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+}
+
+.reject-modal {
+    background: #fff;
+    padding: 25px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+}
+
+.reject-modal h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.reject-modal p {
+    margin-bottom: 20px;
+}
+
+.modal-field {
+    margin-bottom: 15px;
+}
+
+.modal-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.modal-field select,
+.modal-field textarea {
+    width: 100%;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+/* =============================================================================
+   Settings Page Specific
+   ============================================================================= */
+
+.asae-to-status-indicator {
+    margin-top: 10px;
+}
+
+.status-active {
+    color: #155724;
+    background: #d4edda;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-warning {
+    color: #856404;
+    background: #fff3cd;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-inactive {
+    color: #666;
+    background: #e5e5e5;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.model-recommendations {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.model-rec {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.model-rec strong {
+    color: #1d2327;
+}
+
+.model-rec span {
+    font-size: 12px;
+    color: #666;
+}
+
+/* =============================================================================
+   Messages (Success, Error, Processing)
+   ============================================================================= */
+
+.processing-message {
+    padding: 15px;
+    background: #e7f3ff;
+    border-left: 4px solid #2271b1;
+    margin-bottom: 15px;
+}
+
+.error-message {
+    padding: 15px;
+    background: #fcf0f1;
+    border-left: 4px solid #d63638;
+    margin-bottom: 15px;
+    color: #8a1f1f;
+}
+
+.success-message {
+    padding: 15px;
+    background: #edfaef;
+    border-left: 4px solid #00a32a;
+    margin-bottom: 15px;
+    color: #0a5c1a;
+}
+
+/* =============================================================================
+   Sidebar and Footer
+   ============================================================================= */
+
+.asae-to-sidebar ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.asae-to-sidebar ol li {
+    margin-bottom: 8px;
+    color: #555;
+}
+
+.asae-to-sidebar ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.asae-to-sidebar ul li {
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.asae-to-sidebar h4 {
+    margin: 15px 0 10px 0;
+    color: #1d2327;
+}
+
+.asae-to-footer {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+    text-align: center;
+}
+
+.asae-to-footer p {
+    color: #666;
+    font-size: 12px;
+    margin: 0;
+}
+
+/* =============================================================================
+   Responsive Adjustments
+   ============================================================================= */
+
+@media screen and (max-width: 1200px) {
+    .asae-to-container {
+        flex-direction: column;
+    }
+    
+    .asae-to-main,
+    .asae-to-sidebar {
+        width: 100%;
+        min-width: auto;
+    }
+}
+
+@media screen and (max-width: 600px) {
+    .result-item-enhanced {
+        flex-wrap: wrap;
+    }
+    
+    .result-item-enhanced .result-actions {
+        width: 100%;
+        margin-top: 10px;
+        justify-content: flex-end;
+    }
+    
+    .asae-to-date-range {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    #results-actions {
+        flex-wrap: wrap;
+    }
+    
+    .asae-to-results-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}
