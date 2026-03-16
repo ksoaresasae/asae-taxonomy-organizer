@@ -1,20 +1,14 @@
 /**
  * ASAE Taxonomy Organizer - Admin JavaScript
- * 
- * This file handles all the client-side functionality for the plugin's admin pages.
- * It manages form interactions, AJAX requests, result display, and the approval
- * workflow. The code is organized into a single ASAE_TO object to avoid polluting
- * the global namespace.
- * 
- * Key Features:
- * - Dynamic taxonomy loading based on post type selection
- * - Preview mode with individual approve/reject actions
- * - Batch action buttons (approve all, approve selected, reject all)
- * - Category selection when rejecting (to choose a different category)
- * - Rejection notes for AI training feedback
- * - Settings page handling (API key, model selection, connection test)
- * - Batch status monitoring with auto-refresh
- * 
+ *
+ * v0.1.0 changes:
+ * - Chunked preview: processes items in small AJAX batches so partial results
+ *   survive timeouts.
+ * - Cost estimate confirmation before AI processing.
+ * - Progress bar during chunked preview.
+ * - Rate-limit pause with automatic retry.
+ * - Reset-usage button on Settings page.
+ *
  * @package ASAE_Taxonomy_Organizer
  * @author Keith M. Soares
  * @since 0.0.1
@@ -23,70 +17,57 @@
 (function($) {
     'use strict';
 
-    /**
-     * Main plugin object containing all functionality
-     * Using an object pattern keeps everything organized and avoids global scope pollution
-     */
     var ASAE_TO = {
-        // Stores results that are pending user review
         pendingResults: [],
-        
-        // The current taxonomy being used (needed for saving)
         currentTaxonomy: '',
-        
-        // All available terms for the current taxonomy (for rejection category selection)
         allTerms: [],
+        previewChunkSize: 10,
 
-        /**
-         * Initialize the plugin functionality
-         * Called when the DOM is ready
-         */
+        // =====================================================================
+        // Initialisation
+        // =====================================================================
+
         init: function() {
             this.bindEvents();
             this.startBatchPolling();
             this.initSettingsPage();
         },
 
-        /**
-         * Bind all event handlers
-         * Organized by feature area for easier maintenance
-         */
         bindEvents: function() {
-            // === Form Controls ===
+            // Form controls
             $('#post_type').on('change', this.loadTaxonomies);
             $('#taxonomy').on('change', this.checkFormValidity);
             $('#preview_mode').on('change', this.handlePreviewModeChange);
             $('#items_count').on('change', this.handleItemsCountChange);
             $('#confidence_threshold').on('input', this.updateConfidenceDisplay);
             $('#asae-to-form').on('submit', this.processContent);
-            
-            // === Batch Management ===
+
+            // Batch management
             $(document).on('click', '.cancel-batch', this.cancelBatch);
             $('#cancel-all-batches').on('click', this.cancelAllBatches);
-            
-            // === Approval Workflow ===
+
+            // Approval workflow
             $('#approve-all-btn').on('click', this.approveAll);
             $('#approve-selected-btn').on('click', this.approveSelected);
             $('#reject-all-btn').on('click', this.rejectAll);
             $(document).on('click', '.approve-item', this.approveItem);
             $(document).on('click', '.reject-item', this.showRejectModal);
             $(document).on('change', '.result-checkbox', this.updateSelectedCount);
-            
-            // === Rejection Modal ===
+
+            // Rejection modal
             $(document).on('click', '.reject-confirm', this.confirmReject);
             $(document).on('click', '.reject-cancel', this.cancelReject);
             $(document).on('click', '.modal-overlay', this.cancelReject);
         },
 
-        /**
-         * Load taxonomies for the selected post type
-         * Called when the post type dropdown changes
-         */
+        // =====================================================================
+        // Form helpers (unchanged from v0.0.x)
+        // =====================================================================
+
         loadTaxonomies: function() {
             var postType = $(this).val();
             var $taxonomySelect = $('#taxonomy');
 
-            // Reset if no post type selected
             if (!postType) {
                 $taxonomySelect.prop('disabled', true)
                     .html('<option value="">Select a post type first...</option>');
@@ -94,25 +75,19 @@
                 return;
             }
 
-            // Show loading state
             $taxonomySelect.prop('disabled', true)
                 .html('<option value="">Loading...</option>');
 
-            // Fetch taxonomies via AJAX
             $.ajax({
                 url: asaeToAdmin.ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'asae_to_get_taxonomies',
-                    nonce: asaeToAdmin.nonce,
-                    post_type: postType
-                },
+                data: { action: 'asae_to_get_taxonomies', nonce: asaeToAdmin.nonce, post_type: postType },
                 success: function(response) {
                     if (response.success && response.data.length > 0) {
                         var options = '<option value="">Select a taxonomy...</option>';
-                        $.each(response.data, function(index, taxonomy) {
-                            options += '<option value="' + ASAE_TO.escapeHtml(taxonomy.name) + '">' + 
-                                       ASAE_TO.escapeHtml(taxonomy.label) + '</option>';
+                        $.each(response.data, function(i, tax) {
+                            options += '<option value="' + ASAE_TO.escapeHtml(tax.name) + '">' +
+                                       ASAE_TO.escapeHtml(tax.label) + '</option>';
                         });
                         $taxonomySelect.html(options).prop('disabled', false);
                     } else {
@@ -127,78 +102,45 @@
             });
         },
 
-        /**
-         * Handle preview mode toggle changes
-         * Shows warning when "All" is selected (preview not available for all)
-         */
         handlePreviewModeChange: function() {
             var isPreview = $(this).is(':checked');
-            var $itemsCount = $('#items_count');
-            var itemsValue = $itemsCount.val();
-            
-            // If enabling preview but "all" is selected, switch to 100
-            if (isPreview && itemsValue === 'all') {
-                $itemsCount.val('100');
+            if (isPreview && $('#items_count').val() === 'all') {
+                $('#items_count').val('100');
                 $('#batch-notice').hide();
                 $('#preview-limit-note').show();
             } else {
                 $('#preview-limit-note').hide();
             }
-            
             ASAE_TO.handleItemsCountChange();
         },
 
-        /**
-         * Handle items count dropdown changes
-         * Shows/hides batch notice and enforces preview limits
-         */
         handleItemsCountChange: function() {
             var itemsCount = $('#items_count').val();
             var $previewMode = $('#preview_mode');
-            var $batchNotice = $('#batch-notice');
-            var $previewNote = $('#preview-limit-note');
 
             if (itemsCount === 'all') {
-                // Disable preview mode for "all"
                 $previewMode.prop('checked', false).prop('disabled', true);
-                $batchNotice.show();
-                $previewNote.hide();
+                $('#batch-notice').show();
+                $('#preview-limit-note').hide();
             } else {
                 $previewMode.prop('disabled', false);
-                $batchNotice.hide();
-                
-                // Show note if selecting more than 100 with preview
-                if (parseInt(itemsCount) > 100 && $previewMode.is(':checked')) {
-                    $previewNote.show();
-                } else {
-                    $previewNote.hide();
-                }
+                $('#batch-notice').hide();
+                $('#preview-limit-note').toggle(parseInt(itemsCount) > 100 && $previewMode.is(':checked'));
             }
         },
 
-        /**
-         * Update the confidence threshold display value
-         */
         updateConfidenceDisplay: function() {
-            var value = $(this).val();
-            $('#confidence_value').text(value + '%');
+            $('#confidence_value').text($(this).val() + '%');
         },
 
-        /**
-         * Check if the form is valid and enable/disable submit button
-         */
         checkFormValidity: function() {
-            var postType = $('#post_type').val();
-            var taxonomy = $('#taxonomy').val();
-            var $processBtn = $('#process-btn');
-
-            $processBtn.prop('disabled', !(postType && taxonomy));
+            $('#process-btn').prop('disabled', !($('#post_type').val() && $('#taxonomy').val()));
         },
 
-        /**
-         * Submit the form and process content
-         * Handles the main analysis workflow
-         */
+        // =====================================================================
+        // Main processing entry point
+        // =====================================================================
+
         processContent: function(e) {
             e.preventDefault();
 
@@ -209,7 +151,6 @@
             var $resultsSummary = $('#results-summary');
             var $resultsActions = $('#results-actions');
 
-            // Show loading state
             $processBtn.prop('disabled', true);
             $spinner.addClass('is-active');
             $resultsCard.hide();
@@ -219,10 +160,7 @@
             ASAE_TO.pendingResults = [];
             ASAE_TO.allTerms = [];
 
-            // Gather form data
             var formData = {
-                action: 'asae_to_process_content',
-                nonce: asaeToAdmin.nonce,
                 post_type: $('#post_type').val(),
                 taxonomy: $('#taxonomy').val(),
                 preview_mode: $('#preview_mode').is(':checked') ? 'true' : 'false',
@@ -237,132 +175,320 @@
 
             ASAE_TO.currentTaxonomy = formData.taxonomy;
 
-            // Submit the request
+            // If AI is enabled, show cost estimate first
+            if (formData.use_ai === 'true') {
+                ASAE_TO.getCostEstimateAndProcess(formData);
+            } else {
+                ASAE_TO.startProcessing(formData);
+            }
+        },
+
+        /**
+         * Fetch cost estimate, show confirmation, then start processing.
+         */
+        getCostEstimateAndProcess: function(formData) {
+            var $spinner = $('#processing-spinner');
+            var $processBtn = $('#process-btn');
+
             $.ajax({
                 url: asaeToAdmin.ajaxUrl,
                 type: 'POST',
-                data: formData,
+                data: {
+                    action: 'asae_to_get_cost_estimate',
+                    nonce: asaeToAdmin.nonce,
+                    post_type: formData.post_type,
+                    taxonomy: formData.taxonomy,
+                    items_count: formData.items_count,
+                    ignore_categorized: formData.ignore_categorized,
+                    date_from: formData.date_from,
+                    date_to: formData.date_to,
+                    exclude_taxonomy: formData.exclude_taxonomy
+                },
                 success: function(response) {
-                    $spinner.removeClass('is-active');
-                    $processBtn.prop('disabled', false);
-                    $resultsCard.show();
+                    if (!response.success) {
+                        $spinner.removeClass('is-active');
+                        $processBtn.prop('disabled', false);
+                        return;
+                    }
 
-                    if (response.success) {
-                        if (response.is_batch) {
-                            // Batch mode - show message and refresh status
-                            $resultsContainer.html(
-                                '<div class="processing-message">' +
-                                '<strong>Batch Processing Started</strong><br>' +
-                                response.message + '<br>' +
-                                'Track progress in the Active Batches panel.' +
-                                '</div>'
-                            );
-                            ASAE_TO.refreshBatchStatus();
-                        } else {
-                            // Store terms for category selection
-                            if (response.all_terms) {
-                                ASAE_TO.allTerms = response.all_terms;
-                            }
-                            ASAE_TO.displayResultsWithApproval(response);
+                    var d = response.data;
+
+                    if (d.count === 0) {
+                        $spinner.removeClass('is-active');
+                        $processBtn.prop('disabled', false);
+                        $('#results-card').show();
+                        $('#results-container').html('<div class="success-message">No content found matching your criteria.</div>');
+                        return;
+                    }
+
+                    // Build confirmation message
+                    var msg = 'Found ' + d.count + ' items to analyse.\n';
+                    if (d.ai_enabled) {
+                        msg += 'Estimated cost: $' + d.estimated_cost + ' (' + d.model + ').\n';
+                        if (d.monthly_limit > 0) {
+                            msg += 'Remaining budget: ' + d.remaining_calls + ' calls this month.\n';
                         }
+                        if (d.budget_exceeded) {
+                            msg += '\nWARNING: This would exceed your monthly API call limit.\n' +
+                                   'Items beyond the limit will use keyword matching instead.';
+                        }
+                    }
+                    msg += '\nContinue?';
+
+                    if (confirm(msg)) {
+                        ASAE_TO.startProcessing(formData);
                     } else {
-                        $resultsContainer.html('<div class="error-message">' + 
-                            ASAE_TO.escapeHtml(response.message) + '</div>');
+                        $spinner.removeClass('is-active');
+                        $processBtn.prop('disabled', false);
                     }
                 },
                 error: function() {
-                    $spinner.removeClass('is-active');
-                    $processBtn.prop('disabled', false);
-                    $resultsCard.show();
-                    $resultsContainer.html('<div class="error-message">An error occurred while processing content.</div>');
+                    // If estimate fails, proceed anyway
+                    ASAE_TO.startProcessing(formData);
                 }
             });
         },
 
         /**
-         * Display results with approval workflow UI
-         * Builds the interactive results list with approve/reject buttons
+         * Dispatch to the correct processing mode.
+         */
+        startProcessing: function(formData) {
+            if (formData.preview_mode === 'true') {
+                ASAE_TO.processPreviewChunked(formData);
+            } else {
+                ASAE_TO.processContentDirect(formData);
+            }
+        },
+
+        // =====================================================================
+        // Chunked preview mode
+        // =====================================================================
+
+        processPreviewChunked: function(formData) {
+            var $resultsCard = $('#results-card');
+            var $resultsContainer = $('#results-container');
+            var $resultsSummary = $('#results-summary');
+
+            $resultsCard.show();
+            $resultsContainer.html(
+                '<div class="chunked-progress">' +
+                '<div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Analysis progress">' +
+                '<div class="progress-fill" style="width: 0%"></div>' +
+                '</div>' +
+                '<span class="progress-text" role="status" aria-live="polite">Starting analysis...</span>' +
+                '</div>' +
+                '<div class="results-list"></div>'
+            );
+
+            var offset = 0;
+            var chunkSize = ASAE_TO.previewChunkSize;
+
+            function processNextChunk() {
+                $.ajax({
+                    url: asaeToAdmin.ajaxUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'asae_to_process_preview_chunk',
+                        nonce: asaeToAdmin.nonce,
+                        post_type: formData.post_type,
+                        taxonomy: formData.taxonomy,
+                        ignore_categorized: formData.ignore_categorized,
+                        date_from: formData.date_from,
+                        date_to: formData.date_to,
+                        exclude_taxonomy: formData.exclude_taxonomy,
+                        use_ai: formData.use_ai,
+                        offset: offset,
+                        chunk_size: chunkSize
+                    },
+                    success: function(response) {
+                        if (!response.success) {
+                            ASAE_TO.finishChunkedPreview('Error: ' + ASAE_TO.escapeHtml(response.data || 'Unknown error'));
+                            return;
+                        }
+
+                        var data = response.data;
+
+                        // Store terms from the first chunk
+                        if (data.all_terms && data.all_terms.length > 0) {
+                            ASAE_TO.allTerms = data.all_terms;
+                        }
+
+                        // Append results
+                        ASAE_TO.appendChunkResults(data.results);
+
+                        // Update progress
+                        var processed = offset + data.results.length;
+                        var total = data.total;
+                        var pct = total > 0 ? Math.round((processed / total) * 100) : 100;
+                        $('.progress-fill').css('width', pct + '%');
+                        $('.progress-bar').attr('aria-valuenow', pct);
+                        $('.progress-text').text(processed + ' of ' + total + ' items processed');
+
+                        offset += chunkSize;
+
+                        // Handle rate limiting: pause then retry
+                        if (data.rate_limited) {
+                            $('.progress-text').text(processed + ' of ' + total + ' — paused (rate limited), retrying in 10s...');
+                            setTimeout(processNextChunk, 10000);
+                            return;
+                        }
+
+                        if (data.has_more) {
+                            processNextChunk();
+                        } else {
+                            ASAE_TO.finishChunkedPreview(null, processed);
+                        }
+                    },
+                    error: function() {
+                        ASAE_TO.finishChunkedPreview('Connection error. Results so far are preserved.');
+                    }
+                });
+            }
+
+            processNextChunk();
+        },
+
+        appendChunkResults: function(results) {
+            var $list = $('#results-container .results-list');
+
+            $.each(results, function(i, result) {
+                var confidenceClass = 'confidence-' + result.confidence_level;
+                var statusClass = result.saved ? 'saved' : (result.needs_review ? 'pending' : 'skipped');
+                var statusText = result.saved ? 'Saved' : (result.needs_review ? 'Pending Review' : 'Skipped');
+
+                var html = '<div class="result-item-enhanced" ' +
+                    'data-post-id="' + result.post_id + '" ' +
+                    'data-term-id="' + result.term_id + '" ' +
+                    'data-term-name="' + ASAE_TO.escapeHtml(result.suggested_category) + '">';
+
+                if (result.needs_review && result.term_id) {
+                    html += '<input type="checkbox" class="result-checkbox" checked aria-label="Select: ' + ASAE_TO.escapeHtml(result.title) + '">';
+                    // Track in pending
+                    ASAE_TO.pendingResults.push(result);
+                }
+
+                html += '<div class="result-content">';
+                html += '<div class="result-title-row">';
+                html += '<span class="result-title">' + ASAE_TO.escapeHtml(result.title) + '</span>';
+                html += '<span class="result-date">' + ASAE_TO.formatDate(result.post_date) + '</span>';
+                html += '</div>';
+                html += '<div class="result-meta-row">';
+                html += '<span class="result-category">' + ASAE_TO.escapeHtml(result.suggested_category) + '</span>';
+                html += '<span class="confidence-badge ' + confidenceClass + '">' + result.confidence + '%</span>';
+                html += '<span class="result-status ' + statusClass + '">' + statusText + '</span>';
+                html += '</div></div>';
+
+                if (result.needs_review && result.term_id) {
+                    html += '<div class="result-actions">';
+                    html += '<button class="button button-small button-primary approve-item" ' +
+                            'data-post-id="' + result.post_id + '" data-term-id="' + result.term_id + '">Approve</button>';
+                    html += '<button class="button button-small reject-item" ' +
+                            'data-post-id="' + result.post_id + '" data-term-id="' + result.term_id + '">Reject</button>';
+                    html += '</div>';
+                }
+
+                html += '</div>';
+                $list.append(html);
+            });
+        },
+
+        finishChunkedPreview: function(errorMsg, processed) {
+            $('.chunked-progress').remove();
+            $('#processing-spinner').removeClass('is-active');
+            $('#process-btn').prop('disabled', false);
+
+            if (errorMsg) {
+                $('#results-summary').html('<div class="error-message" role="alert">' + errorMsg + '</div>');
+            } else {
+                $('#results-summary').html('<div class="success-message" role="status">Analysis complete. ' +
+                    (processed || 0) + ' items processed.</div>');
+            }
+
+            if (ASAE_TO.pendingResults.length > 0) {
+                $('#results-actions').show();
+            }
+            ASAE_TO.updateSelectedCount();
+        },
+
+        // =====================================================================
+        // Direct / batch processing (non-preview, non-chunked)
+        // =====================================================================
+
+        processContentDirect: function(formData) {
+            $.ajax({
+                url: asaeToAdmin.ajaxUrl,
+                type: 'POST',
+                data: $.extend({
+                    action: 'asae_to_process_content',
+                    nonce: asaeToAdmin.nonce
+                }, formData),
+                success: function(response) {
+                    $('#processing-spinner').removeClass('is-active');
+                    $('#process-btn').prop('disabled', false);
+                    $('#results-card').show();
+
+                    if (response.success) {
+                        if (response.is_batch) {
+                            $('#results-container').html(
+                                '<div class="processing-message" role="status">' +
+                                '<strong>Batch Processing Started</strong><br>' +
+                                response.message + '<br>' +
+                                'Track progress in the Active Batches panel.</div>'
+                            );
+                            ASAE_TO.refreshBatchStatus();
+                        } else {
+                            if (response.all_terms) { ASAE_TO.allTerms = response.all_terms; }
+                            ASAE_TO.displayResultsWithApproval(response);
+                        }
+                    } else {
+                        $('#results-container').html('<div class="error-message" role="alert">' +
+                            ASAE_TO.escapeHtml(response.message) + '</div>');
+                    }
+                },
+                error: function() {
+                    $('#processing-spinner').removeClass('is-active');
+                    $('#process-btn').prop('disabled', false);
+                    $('#results-card').show();
+                    $('#results-container').html('<div class="error-message" role="alert">An error occurred while processing content.</div>');
+                }
+            });
+        },
+
+        /**
+         * Display results for direct-save mode (non-chunked).
          */
         displayResultsWithApproval: function(response) {
             var $resultsContainer = $('#results-container');
             var $resultsSummary = $('#results-summary');
             var $resultsActions = $('#results-actions');
-            var html = '';
 
-            // Show summary message
             if (response.message) {
-                $resultsSummary.html('<div class="success-message">' + 
+                $resultsSummary.html('<div class="success-message" role="status">' +
                     ASAE_TO.escapeHtml(response.message) + '</div>');
             }
 
-            // Filter to items needing review
             ASAE_TO.pendingResults = response.results.filter(function(r) {
                 return r.needs_review && r.term_id;
             });
 
-            // Show batch action buttons if in preview mode with pending items
             if (response.preview_mode && ASAE_TO.pendingResults.length > 0) {
                 $resultsActions.show();
             }
 
-            // Build results list HTML
             if (response.results && response.results.length > 0) {
-                html += '<div class="results-list">';
-                $.each(response.results, function(index, result) {
-                    var confidenceClass = 'confidence-' + result.confidence_level;
-                    var statusClass = result.saved ? 'saved' : (result.needs_review ? 'pending' : 'skipped');
-                    var statusText = result.saved ? 'Saved' : (result.needs_review ? 'Pending Review' : 'Skipped');
-                    
-                    html += '<div class="result-item-enhanced" ' +
-                            'data-post-id="' + result.post_id + '" ' +
-                            'data-term-id="' + result.term_id + '" ' +
-                            'data-term-name="' + ASAE_TO.escapeHtml(result.suggested_category) + '">';
-                    
-                    // Checkbox for batch selection
-                    if (result.needs_review && result.term_id) {
-                        html += '<input type="checkbox" class="result-checkbox" checked>';
-                    }
-                    
-                    // Content section
-                    html += '<div class="result-content">';
-                    html += '<div class="result-title-row">';
-                    html += '<span class="result-title">' + ASAE_TO.escapeHtml(result.title) + '</span>';
-                    html += '<span class="result-date">' + ASAE_TO.formatDate(result.post_date) + '</span>';
-                    html += '</div>';
-                    html += '<div class="result-meta-row">';
-                    html += '<span class="result-category">' + ASAE_TO.escapeHtml(result.suggested_category) + '</span>';
-                    html += '<span class="confidence-badge ' + confidenceClass + '">' + result.confidence + '%</span>';
-                    html += '<span class="result-status ' + statusClass + '">' + statusText + '</span>';
-                    html += '</div>';
-                    html += '</div>';
-                    
-                    // Action buttons
-                    if (result.needs_review && result.term_id) {
-                        html += '<div class="result-actions">';
-                        html += '<button class="button button-small button-primary approve-item" ' +
-                                'data-post-id="' + result.post_id + '" ' +
-                                'data-term-id="' + result.term_id + '">Approve</button>';
-                        html += '<button class="button button-small reject-item" ' +
-                                'data-post-id="' + result.post_id + '" ' +
-                                'data-term-id="' + result.term_id + '">Reject</button>';
-                        html += '</div>';
-                    }
-                    
-                    html += '</div>';
-                });
-                html += '</div>';
+                $resultsContainer.html('<div class="results-list"></div>');
+                ASAE_TO.appendChunkResults(response.results);
             } else if (!response.message) {
-                html += '<p>No results to display.</p>';
+                $resultsContainer.html('<p>No results to display.</p>');
             }
 
-            $resultsContainer.html(html);
             ASAE_TO.updateSelectedCount();
         },
 
-        /**
-         * Approve a single item
-         * Saves the suggested categorization
-         */
+        // =====================================================================
+        // Approval workflow (mostly unchanged)
+        // =====================================================================
+
         approveItem: function(e) {
             e.preventDefault();
             var $btn = $(this);
@@ -383,15 +509,10 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        // Update UI to show saved state
                         $item.find('.result-status').removeClass('pending').addClass('saved').text('Saved');
                         $item.find('.result-actions').remove();
                         $item.find('.result-checkbox').remove();
-                        
-                        // Remove from pending list
-                        ASAE_TO.pendingResults = ASAE_TO.pendingResults.filter(function(r) {
-                            return r.post_id !== postId;
-                        });
+                        ASAE_TO.pendingResults = ASAE_TO.pendingResults.filter(function(r) { return r.post_id !== postId; });
                         ASAE_TO.updateSelectedCount();
                     } else {
                         $btn.prop('disabled', false).text('Approve');
@@ -405,55 +526,45 @@
             });
         },
 
-        /**
-         * Show the rejection modal for selecting a different category
-         * Allows users to choose a different category and provide feedback
-         */
         showRejectModal: function(e) {
             e.preventDefault();
-            var $btn = $(this);
-            var $item = $btn.closest('.result-item-enhanced');
+            var $item = $(this).closest('.result-item-enhanced');
             var postId = $item.data('post-id');
             var suggestedTermId = $item.data('term-id');
             var suggestedTermName = $item.data('term-name');
-            
-            // Build category options
+
             var categoryOptions = '<option value="">-- Keep no category --</option>';
             $.each(ASAE_TO.allTerms, function(i, term) {
-                var selected = '';
-                categoryOptions += '<option value="' + term.term_id + '"' + selected + '>' + 
-                                   ASAE_TO.escapeHtml(term.name) + '</option>';
+                categoryOptions += '<option value="' + term.term_id + '">' +
+                    ASAE_TO.escapeHtml(term.name) + '</option>';
             });
-            
-            // Create modal HTML
-            var modalHtml = '<div class="modal-overlay">' +
+
+            var modalHtml = '<div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Reject suggestion">' +
                 '<div class="reject-modal">' +
                 '<h3>Reject Suggestion</h3>' +
                 '<p>The AI suggested: <strong>' + ASAE_TO.escapeHtml(suggestedTermName) + '</strong></p>' +
                 '<div class="modal-field">' +
                 '<label for="new-category">Select correct category (optional):</label>' +
-                '<select id="new-category" class="regular-text">' + categoryOptions + '</select>' +
-                '</div>' +
+                '<select id="new-category" class="regular-text">' + categoryOptions + '</select></div>' +
                 '<div class="modal-field">' +
                 '<label for="reject-notes">Why was this wrong? (helps improve AI):</label>' +
-                '<textarea id="reject-notes" rows="3" class="large-text"></textarea>' +
-                '</div>' +
+                '<textarea id="reject-notes" rows="3" class="large-text"></textarea></div>' +
                 '<div class="modal-actions">' +
-                '<button class="button button-primary reject-confirm" ' +
-                'data-post-id="' + postId + '" ' +
-                'data-suggested-term-id="' + suggestedTermId + '">Confirm Rejection</button>' +
-                '<button class="button reject-cancel">Cancel</button>' +
-                '</div>' +
-                '</div>' +
-                '</div>';
-            
-            // Add modal to page
+                '<button class="button button-primary reject-confirm" data-post-id="' + postId +
+                '" data-suggested-term-id="' + suggestedTermId + '">Confirm Rejection</button>' +
+                '<button class="button reject-cancel">Cancel</button></div></div></div>';
+
             $('body').append(modalHtml);
+            // Focus the first interactive element in the modal
+            $('#new-category').focus();
+            // Escape key closes modal
+            $(document).on('keydown.asae-modal', function(ev) {
+                if (ev.key === 'Escape') {
+                    ASAE_TO.closeModal();
+                }
+            });
         },
 
-        /**
-         * Confirm rejection with optional new category and notes
-         */
         confirmReject: function(e) {
             e.preventDefault();
             var $btn = $(this);
@@ -461,10 +572,9 @@
             var suggestedTermId = $btn.data('suggested-term-id');
             var selectedTermId = $('#new-category').val();
             var notes = $('#reject-notes').val();
-            
+
             $btn.prop('disabled', true).text('Saving...');
-            
-            // Log the rejection feedback
+
             $.ajax({
                 url: asaeToAdmin.ajaxUrl,
                 type: 'POST',
@@ -477,8 +587,7 @@
                     notes: notes,
                     taxonomy: ASAE_TO.currentTaxonomy
                 },
-                success: function(response) {
-                    // If user selected a new category, save it
+                success: function() {
                     if (selectedTermId) {
                         $.ajax({
                             url: asaeToAdmin.ajaxUrl,
@@ -489,65 +598,49 @@
                                 taxonomy: ASAE_TO.currentTaxonomy,
                                 items: JSON.stringify([{post_id: postId, term_id: parseInt(selectedTermId)}])
                             },
-                            success: function(saveResponse) {
-                                ASAE_TO.finishReject(postId, saveResponse.success ? 'Corrected' : 'Rejected');
-                            },
-                            error: function() {
-                                ASAE_TO.finishReject(postId, 'Rejected');
-                            }
+                            success: function(r) { ASAE_TO.finishReject(postId, r.success ? 'Corrected' : 'Rejected'); },
+                            error: function()    { ASAE_TO.finishReject(postId, 'Rejected'); }
                         });
                     } else {
                         ASAE_TO.finishReject(postId, 'Rejected');
                     }
                 },
-                error: function() {
-                    ASAE_TO.finishReject(postId, 'Rejected');
-                }
+                error: function() { ASAE_TO.finishReject(postId, 'Rejected'); }
             });
         },
 
-        /**
-         * Finish the rejection process and update UI
-         */
+        closeModal: function() {
+            var $overlay = $('.modal-overlay');
+            if ($overlay.length) {
+                $overlay.remove();
+                $(document).off('keydown.asae-modal');
+            }
+        },
+
         finishReject: function(postId, statusText) {
-            // Close modal
-            $('.modal-overlay').remove();
-            
-            // Update the item in the list
+            ASAE_TO.closeModal();
             var $item = $('.result-item-enhanced[data-post-id="' + postId + '"]');
             $item.find('.result-status').removeClass('pending').addClass('skipped').text(statusText);
             $item.find('.result-actions').remove();
             $item.find('.result-checkbox').remove();
-            
-            // Remove from pending
-            ASAE_TO.pendingResults = ASAE_TO.pendingResults.filter(function(r) {
-                return r.post_id !== postId;
-            });
+            // Restore focus to the result item
+            $item.attr('tabindex', '-1').focus();
+            ASAE_TO.pendingResults = ASAE_TO.pendingResults.filter(function(r) { return r.post_id !== postId; });
             ASAE_TO.updateSelectedCount();
         },
 
-        /**
-         * Cancel rejection and close modal
-         */
         cancelReject: function(e) {
             if ($(e.target).hasClass('modal-overlay') || $(e.target).hasClass('reject-cancel')) {
-                $('.modal-overlay').remove();
+                ASAE_TO.closeModal();
             }
         },
 
-        /**
-         * Approve all pending items
-         */
         approveAll: function(e) {
             e.preventDefault();
             var itemsToSave = ASAE_TO.pendingResults.map(function(r) {
                 return {post_id: r.post_id, term_id: r.term_id};
             });
-
-            if (itemsToSave.length === 0) {
-                alert('No items to approve.');
-                return;
-            }
+            if (itemsToSave.length === 0) { alert('No items to approve.'); return; }
 
             var $btn = $(this);
             $btn.prop('disabled', true).text('Saving...');
@@ -564,7 +657,6 @@
                 success: function(response) {
                     $btn.prop('disabled', false).text('Approve All');
                     if (response.success) {
-                        // Update all items to saved state
                         $('.result-item-enhanced').each(function() {
                             var $item = $(this);
                             if ($item.find('.result-checkbox').length) {
@@ -575,7 +667,7 @@
                         });
                         ASAE_TO.pendingResults = [];
                         $('#results-actions').hide();
-                        $('#results-summary').html('<div class="success-message">' + 
+                        $('#results-summary').html('<div class="success-message">' +
                             ASAE_TO.escapeHtml(response.message) + '</div>');
                     } else {
                         alert('Failed to save: ' + response.message);
@@ -588,28 +680,17 @@
             });
         },
 
-        /**
-         * Approve only selected (checked) items
-         */
         approveSelected: function(e) {
             e.preventDefault();
             var itemsToSave = [];
-            
             $('.result-item-enhanced').each(function() {
                 var $item = $(this);
-                var $checkbox = $item.find('.result-checkbox');
-                if ($checkbox.length && $checkbox.is(':checked')) {
-                    itemsToSave.push({
-                        post_id: $item.data('post-id'),
-                        term_id: $item.data('term-id')
-                    });
+                var $cb = $item.find('.result-checkbox');
+                if ($cb.length && $cb.is(':checked')) {
+                    itemsToSave.push({ post_id: $item.data('post-id'), term_id: $item.data('term-id') });
                 }
             });
-
-            if (itemsToSave.length === 0) {
-                alert('No items selected.');
-                return;
-            }
+            if (itemsToSave.length === 0) { alert('No items selected.'); return; }
 
             var $btn = $(this);
             $btn.prop('disabled', true).text('Saving...');
@@ -639,7 +720,7 @@
                             return savedIds.indexOf(r.post_id) === -1;
                         });
                         ASAE_TO.updateSelectedCount();
-                        $('#results-summary').html('<div class="success-message">' + 
+                        $('#results-summary').html('<div class="success-message">' +
                             ASAE_TO.escapeHtml(response.message) + '</div>');
                     } else {
                         alert('Failed to save: ' + response.message);
@@ -652,15 +733,9 @@
             });
         },
 
-        /**
-         * Reject all pending items (clear without saving)
-         */
         rejectAll: function(e) {
             e.preventDefault();
-            if (!confirm('Are you sure you want to reject all pending items? This will clear the list without saving.')) {
-                return;
-            }
-
+            if (!confirm('Are you sure you want to reject all pending items?')) { return; }
             $('.result-item-enhanced').each(function() {
                 var $item = $(this);
                 if ($item.find('.result-checkbox').length) {
@@ -673,13 +748,9 @@
             $('#results-actions').hide();
         },
 
-        /**
-         * Update the "Approve Selected" button count
-         */
         updateSelectedCount: function() {
             var checkedCount = $('.result-checkbox:checked').length;
             var totalPending = $('.result-checkbox').length;
-            
             if (totalPending === 0) {
                 $('#results-actions').hide();
             } else {
@@ -687,80 +758,55 @@
             }
         },
 
-        // =========================================================================
-        // Settings Page Functions
-        // =========================================================================
+        // =====================================================================
+        // Settings page
+        // =====================================================================
 
-        /**
-         * Initialize settings page functionality
-         */
         initSettingsPage: function() {
-            // API key show/hide toggle
             $('#toggle-api-key').on('click', function() {
                 var $input = $('#openai_api_key');
                 var $btn = $(this);
-                
                 if ($input.attr('type') === 'password') {
                     $input.attr('type', 'text');
-                    $btn.html('<span class="dashicons dashicons-hidden"></span> Hide');
+                    $btn.attr('aria-label', 'Hide API key').html('<span class="dashicons dashicons-hidden"></span> Hide');
                 } else {
                     $input.attr('type', 'password');
-                    $btn.html('<span class="dashicons dashicons-visibility"></span> Show');
+                    $btn.attr('aria-label', 'Show API key').html('<span class="dashicons dashicons-visibility"></span> Show');
                 }
             });
-            
-            // Test connection button
+
             $('#test-connection-btn').on('click', this.testConnection);
-            
-            // Save settings form
             $('#asae-to-settings-form').on('submit', this.saveSettings);
-            
-            // AI toggle change
             $('#use_ai').on('change', this.updateAIStatus);
+            $('#reset-usage-btn').on('click', this.resetUsage);
         },
 
-        /**
-         * Test the OpenAI connection
-         */
         testConnection: function(e) {
             e.preventDefault();
-            
             var $btn = $(this);
             var $spinner = $('#settings-spinner');
             var $result = $('#connection-result');
-            
             var apiKey = $('#openai_api_key').val();
             var model = $('#openai_model').val();
-            
+
             if (!apiKey) {
                 $result.html('<div class="error-message">Please enter an API key first.</div>').show();
                 return;
             }
-            
+
             $btn.prop('disabled', true);
             $spinner.addClass('is-active');
             $result.hide();
-            
+
             $.ajax({
                 url: asaeToAdmin.ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'asae_to_test_connection',
-                    nonce: asaeToAdmin.nonce,
-                    api_key: apiKey,
-                    model: model
-                },
+                data: { action: 'asae_to_test_connection', nonce: asaeToAdmin.nonce, api_key: apiKey, model: model },
                 success: function(response) {
                     $btn.prop('disabled', false);
                     $spinner.removeClass('is-active');
-                    
-                    if (response.success) {
-                        $result.html('<div class="success-message">' + 
-                            ASAE_TO.escapeHtml(response.message) + '</div>').show();
-                    } else {
-                        $result.html('<div class="error-message">' + 
-                            ASAE_TO.escapeHtml(response.message) + '</div>').show();
-                    }
+                    var cls = response.success ? 'success-message' : 'error-message';
+                    $result.html('<div class="' + cls + '">' + ASAE_TO.escapeHtml(response.message) + '</div>').show();
                 },
                 error: function() {
                     $btn.prop('disabled', false);
@@ -770,19 +816,15 @@
             });
         },
 
-        /**
-         * Save settings form
-         */
         saveSettings: function(e) {
             e.preventDefault();
-            
             var $btn = $('#save-settings-btn');
             var $spinner = $('#settings-spinner');
             var $result = $('#connection-result');
-            
+
             $btn.prop('disabled', true);
             $spinner.addClass('is-active');
-            
+
             $.ajax({
                 url: asaeToAdmin.ajaxUrl,
                 type: 'POST',
@@ -791,20 +833,16 @@
                     nonce: asaeToAdmin.nonce,
                     api_key: $('#openai_api_key').val(),
                     model: $('#openai_model').val(),
-                    use_ai: $('#use_ai').is(':checked') ? 'yes' : 'no'
+                    use_ai: $('#use_ai').is(':checked') ? 'yes' : 'no',
+                    monthly_api_limit: $('#monthly_api_limit').val(),
+                    api_delay: $('#api_delay').val()
                 },
                 success: function(response) {
                     $btn.prop('disabled', false);
                     $spinner.removeClass('is-active');
-                    
-                    if (response.success) {
-                        $result.html('<div class="success-message">' + 
-                            ASAE_TO.escapeHtml(response.message) + '</div>').show();
-                        ASAE_TO.updateAIStatus();
-                    } else {
-                        $result.html('<div class="error-message">' + 
-                            ASAE_TO.escapeHtml(response.message) + '</div>').show();
-                    }
+                    var cls = response.success ? 'success-message' : 'error-message';
+                    $result.html('<div class="' + cls + '">' + ASAE_TO.escapeHtml(response.message) + '</div>').show();
+                    ASAE_TO.updateAIStatus();
                 },
                 error: function() {
                     $btn.prop('disabled', false);
@@ -814,126 +852,90 @@
             });
         },
 
-        /**
-         * Update the AI status indicator
-         */
         updateAIStatus: function() {
             var $status = $('#ai-status');
             var useAI = $('#use_ai').is(':checked');
             var hasKey = $('#openai_api_key').val().length > 0;
-            
-            if (useAI && hasKey) {
-                $status.html('<span class="status-active">AI Analysis Active</span>');
-            } else if (useAI && !hasKey) {
-                $status.html('<span class="status-warning">AI Enabled but No API Key</span>');
-            } else {
-                $status.html('<span class="status-inactive">Using Keyword Matching</span>');
-            }
+
+            if (useAI && hasKey)       { $status.html('<span class="status-active">AI Analysis Active</span>'); }
+            else if (useAI && !hasKey)  { $status.html('<span class="status-warning">AI Enabled but No API Key</span>'); }
+            else                        { $status.html('<span class="status-inactive">Using Keyword Matching</span>'); }
         },
 
-        // =========================================================================
-        // Batch Management Functions
-        // =========================================================================
-
-        /**
-         * Cancel a single batch
-         */
-        cancelBatch: function(e) {
+        resetUsage: function(e) {
             e.preventDefault();
-
-            var batchId = $(this).data('batch-id');
-            var $batchItem = $(this).closest('.batch-item');
-
-            if (!confirm('Are you sure you want to cancel this batch?')) {
-                return;
-            }
+            if (!confirm('Reset the monthly API call counter to zero?')) { return; }
 
             $.ajax({
                 url: asaeToAdmin.ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'asae_to_cancel_batch',
-                    nonce: asaeToAdmin.nonce,
-                    batch_id: batchId
-                },
+                data: { action: 'asae_to_reset_usage', nonce: asaeToAdmin.nonce },
                 success: function(response) {
                     if (response.success) {
-                        $batchItem.fadeOut(function() {
-                            $(this).remove();
-                            ASAE_TO.checkEmptyBatches();
-                        });
+                        $('#usage-count').text('0');
+                        $('.usage-bar-fill').css('width', '0%').removeClass('usage-danger usage-warning').addClass('usage-ok');
+                    }
+                }
+            });
+        },
+
+        // =====================================================================
+        // Batch status panel
+        // =====================================================================
+
+        cancelBatch: function(e) {
+            e.preventDefault();
+            var batchId = $(this).data('batch-id');
+            var $batchItem = $(this).closest('.batch-item');
+            if (!confirm('Cancel this batch?')) { return; }
+
+            $.ajax({
+                url: asaeToAdmin.ajaxUrl,
+                type: 'POST',
+                data: { action: 'asae_to_cancel_batch', nonce: asaeToAdmin.nonce, batch_id: batchId },
+                success: function(response) {
+                    if (response.success) {
+                        $batchItem.fadeOut(function() { $(this).remove(); ASAE_TO.checkEmptyBatches(); });
                     } else {
                         alert(response.message || 'Failed to cancel batch.');
                     }
                 },
-                error: function() {
-                    alert('An error occurred while cancelling the batch.');
-                }
+                error: function() { alert('An error occurred while cancelling the batch.'); }
             });
         },
 
-        /**
-         * Cancel all active batches
-         */
         cancelAllBatches: function(e) {
             e.preventDefault();
-
-            if (!confirm('Are you sure you want to cancel ALL active batches?')) {
-                return;
-            }
+            if (!confirm('Cancel ALL active batches?')) { return; }
 
             var batchIds = [];
-            $('.batch-item').each(function() {
-                batchIds.push($(this).data('batch-id'));
-            });
+            $('.batch-item').each(function() { batchIds.push($(this).data('batch-id')); });
+            if (batchIds.length === 0) { return; }
 
-            if (batchIds.length === 0) {
-                return;
-            }
-
-            $.each(batchIds, function(index, batchId) {
+            $.each(batchIds, function(i, batchId) {
                 $.ajax({
                     url: asaeToAdmin.ajaxUrl,
                     type: 'POST',
-                    data: {
-                        action: 'asae_to_cancel_batch',
-                        nonce: asaeToAdmin.nonce,
-                        batch_id: batchId
-                    }
+                    data: { action: 'asae_to_cancel_batch', nonce: asaeToAdmin.nonce, batch_id: batchId }
                 });
             });
 
-            $('.batch-item').fadeOut(function() {
-                $(this).remove();
-                ASAE_TO.checkEmptyBatches();
-            });
+            $('.batch-item').fadeOut(function() { $(this).remove(); ASAE_TO.checkEmptyBatches(); });
         },
 
-        /**
-         * Refresh batch status from server
-         */
         refreshBatchStatus: function() {
             $.ajax({
                 url: asaeToAdmin.ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'asae_to_get_batch_status',
-                    nonce: asaeToAdmin.nonce
-                },
+                data: { action: 'asae_to_get_batch_status', nonce: asaeToAdmin.nonce },
                 success: function(response) {
-                    if (response.success) {
-                        ASAE_TO.updateBatchUI(response.data);
-                    }
+                    if (response.success) { ASAE_TO.updateBatchUI(response.data); }
                 }
             });
         },
 
-        /**
-         * Update the batch status UI
-         */
         updateBatchUI: function(batches) {
             var $container = $('#active-batches');
-            
             if (!batches || batches.length === 0) {
                 $container.html('<p class="no-batches">No active batch processes.</p>');
                 $('#cancel-all-batches').prop('disabled', true);
@@ -941,18 +943,14 @@
             }
 
             var html = '';
-            $.each(batches, function(index, batch) {
+            $.each(batches, function(i, batch) {
                 html += '<div class="batch-item" data-batch-id="' + ASAE_TO.escapeHtml(batch.batch_id) + '">';
                 html += '<div class="batch-info">';
-                html += '<strong>' + ASAE_TO.escapeHtml(batch.post_type) + '</strong> &rarr; ' + 
-                        ASAE_TO.escapeHtml(batch.taxonomy);
-                html += '<br>';
+                html += '<strong>' + ASAE_TO.escapeHtml(batch.post_type) + '</strong> &rarr; ' + ASAE_TO.escapeHtml(batch.taxonomy) + '<br>';
                 html += '<span class="batch-progress">' + batch.processed_items + ' / ' + batch.total_items + '</span>';
-                html += '<span class="batch-status status-' + batch.status + '">' + 
-                        ASAE_TO.capitalize(batch.status) + '</span>';
+                html += '<span class="batch-status status-' + batch.status + '">' + ASAE_TO.capitalize(batch.status) + '</span>';
                 html += '</div>';
-                html += '<button class="button button-small cancel-batch" data-batch-id="' + 
-                        ASAE_TO.escapeHtml(batch.batch_id) + '">Cancel</button>';
+                html += '<button class="button button-small cancel-batch" data-batch-id="' + ASAE_TO.escapeHtml(batch.batch_id) + '">Cancel</button>';
                 html += '</div>';
             });
 
@@ -960,9 +958,6 @@
             $('#cancel-all-batches').prop('disabled', false);
         },
 
-        /**
-         * Check if there are any batches and update UI accordingly
-         */
         checkEmptyBatches: function() {
             if ($('.batch-item').length === 0) {
                 $('#active-batches').html('<p class="no-batches">No active batch processes.</p>');
@@ -970,34 +965,21 @@
             }
         },
 
-        /**
-         * Start polling for batch status updates
-         */
         startBatchPolling: function() {
             setInterval(function() {
-                if ($('.batch-item').length > 0) {
-                    ASAE_TO.refreshBatchStatus();
-                }
-            }, 10000); // Poll every 10 seconds
+                if ($('.batch-item').length > 0) { ASAE_TO.refreshBatchStatus(); }
+            }, 10000);
         },
 
-        // =========================================================================
-        // Utility Functions
-        // =========================================================================
+        // =====================================================================
+        // Utilities
+        // =====================================================================
 
-        /**
-         * Format a date string for display
-         */
         formatDate: function(dateStr) {
             if (!dateStr) return '';
-            var date = new Date(dateStr);
-            return date.toLocaleDateString();
+            return new Date(dateStr).toLocaleDateString();
         },
 
-        /**
-         * Escape HTML to prevent XSS
-         * Always use this when inserting user-generated content into the DOM
-         */
         escapeHtml: function(text) {
             if (!text) return '';
             var div = document.createElement('div');
@@ -1005,18 +987,12 @@
             return div.innerHTML;
         },
 
-        /**
-         * Capitalize the first letter of a string
-         */
         capitalize: function(str) {
             if (!str) return '';
             return str.charAt(0).toUpperCase() + str.slice(1);
         }
     };
 
-    // Initialize when DOM is ready
-    $(document).ready(function() {
-        ASAE_TO.init();
-    });
+    $(document).ready(function() { ASAE_TO.init(); });
 
 })(jQuery);

@@ -1,18 +1,15 @@
 <?php
 /**
  * ASAE Taxonomy Organizer - Content Processor
- * 
- * This class handles the core content processing logic. It orchestrates the
- * workflow of fetching content, running it through the analyzer, and either
- * returning results for preview or saving categorizations directly.
- * 
- * Key Responsibilities:
- * - Validating and sanitizing input parameters
- * - Fetching content based on filters (date range, existing categories, etc.)
- * - Coordinating with the AI Analyzer for categorization
- * - Managing batch processing for large content sets
- * - Saving approved categorizations
- * 
+ *
+ * Orchestrates content fetching, analysis, preview, direct-save, and batch
+ * processing.  Key resilience features added in v0.1.0:
+ *
+ * - Per-item progress saves (batch chunks)
+ * - Pre-scheduled next chunk (crash-safe cron chain)
+ * - Try-catch per item so one bad post can't kill a chunk
+ * - Chunked preview endpoint for incremental AJAX results
+ *
  * @package ASAE_Taxonomy_Organizer
  * @author Keith M. Soares
  * @since 0.0.1
@@ -23,285 +20,225 @@ if (!defined('ABSPATH')) {
 }
 
 class ASAE_TO_Processor {
-    
-    /**
-     * Number of items to process per batch chunk
-     * 
-     * This is set to 20 to balance processing speed with server timeout limits.
-     * Processing too many items at once risks hitting PHP's max_execution_time.
-     * 
-     * @var int
-     */
+
+    /** Items per background cron chunk. */
     private $batch_size = 20;
-    
-    /**
-     * Maximum items allowed in preview mode
-     * 
-     * Preview mode is memory-intensive since we hold all results for display.
-     * Limiting to 100 prevents memory exhaustion and keeps the UI responsive.
-     * 
-     * @var int
-     */
+
+    /** Hard cap on preview-mode items. */
     private $preview_limit = 100;
-    
+
+    /** Items returned per chunked-preview AJAX call. */
+    private $preview_chunk_size = 10;
+
+    // =========================================================================
+    // Public entry points
+    // =========================================================================
+
     /**
-     * Process content based on provided parameters
-     * 
-     * This is the main entry point called from the AJAX handler. It validates
-     * inputs, determines the processing mode (preview vs batch), and delegates
-     * to the appropriate method.
-     * 
-     * @param array $params Request parameters from the admin form
-     * @return array Response array with success status, message, and results
+     * Main entry – called from the AJAX handler for direct-save and batch modes.
+     *
+     * @param array $params POST parameters from the admin form
+     * @return array JSON-ready response
      */
     public function process($params) {
-        // Sanitize all input parameters
-        // This is critical for security - never trust user input
-        $post_type = isset($params['post_type']) ? sanitize_text_field($params['post_type']) : '';
-        $taxonomy = isset($params['taxonomy']) ? sanitize_text_field($params['taxonomy']) : '';
-        $items_count = isset($params['items_count']) ? sanitize_text_field($params['items_count']) : '10';
-        $ignore_categorized = isset($params['ignore_categorized']) && $params['ignore_categorized'] === 'true';
-        $preview_mode = isset($params['preview_mode']) && $params['preview_mode'] === 'true';
+        $post_type            = isset($params['post_type']) ? sanitize_text_field($params['post_type']) : '';
+        $taxonomy             = isset($params['taxonomy']) ? sanitize_text_field($params['taxonomy']) : '';
+        $items_count          = isset($params['items_count']) ? sanitize_text_field($params['items_count']) : '10';
+        $ignore_categorized   = isset($params['ignore_categorized']) && $params['ignore_categorized'] === 'true';
+        $preview_mode         = isset($params['preview_mode']) && $params['preview_mode'] === 'true';
         $confidence_threshold = isset($params['confidence_threshold']) ? intval($params['confidence_threshold']) : 0;
-        
-        // Optional filters
-        $date_from = isset($params['date_from']) ? sanitize_text_field($params['date_from']) : '';
-        $date_to = isset($params['date_to']) ? sanitize_text_field($params['date_to']) : '';
-        $exclude_taxonomy = isset($params['exclude_taxonomy']) ? sanitize_text_field($params['exclude_taxonomy']) : '';
-        
-        // Validate required fields
+        $date_from            = isset($params['date_from']) ? sanitize_text_field($params['date_from']) : '';
+        $date_to              = isset($params['date_to']) ? sanitize_text_field($params['date_to']) : '';
+        $exclude_taxonomy     = isset($params['exclude_taxonomy']) ? sanitize_text_field($params['exclude_taxonomy']) : '';
+
         if (empty($post_type) || empty($taxonomy)) {
-            return array(
-                'success' => false,
-                'message' => __('Please select both a post type and taxonomy.', 'asae-taxonomy-organizer')
-            );
+            return array('success' => false, 'message' => __('Please select both a post type and taxonomy.', 'asae-taxonomy-organizer'));
         }
-        
-        // Validate post type and taxonomy exist
         if (!post_type_exists($post_type)) {
-            return array(
-                'success' => false,
-                'message' => __('Invalid post type selected.', 'asae-taxonomy-organizer')
-            );
+            return array('success' => false, 'message' => __('Invalid post type selected.', 'asae-taxonomy-organizer'));
         }
-        
         if (!taxonomy_exists($taxonomy)) {
-            return array(
-                'success' => false,
-                'message' => __('Invalid taxonomy selected.', 'asae-taxonomy-organizer')
-            );
+            return array('success' => false, 'message' => __('Invalid taxonomy selected.', 'asae-taxonomy-organizer'));
         }
-        
-        // Determine processing limit
+
         $limit = ($items_count === 'all') ? -1 : intval($items_count);
-        
-        // Enforce preview mode limit and disable preview for "all"
+
+        // "All Items" → batch mode
         if ($items_count === 'all') {
-            // Can't do preview for "all" - force batch mode
-            $preview_mode = false;
-            
-            // Start batch processing in background
-            return $this->start_batch_process(
-                $post_type, 
-                $taxonomy, 
-                $ignore_categorized, 
-                $date_from, 
-                $date_to, 
-                $exclude_taxonomy, 
-                $confidence_threshold
-            );
+            return $this->start_batch_process($post_type, $taxonomy, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy, $confidence_threshold);
         }
-        
-        // Enforce preview limit
+
         if ($preview_mode && $limit > $this->preview_limit) {
             $limit = $this->preview_limit;
         }
-        
-        // Process items directly
-        return $this->process_items(
-            $post_type, 
-            $taxonomy, 
-            $limit, 
-            $preview_mode, 
-            $ignore_categorized, 
-            $confidence_threshold, 
-            $date_from, 
-            $date_to, 
-            $exclude_taxonomy
-        );
+
+        return $this->process_items($post_type, $taxonomy, $limit, $preview_mode, $ignore_categorized, $confidence_threshold, $date_from, $date_to, $exclude_taxonomy);
     }
-    
+
     /**
-     * Process a set of items for categorization
-     * 
-     * Fetches posts matching the criteria, runs each through the analyzer,
-     * and either returns results for preview or saves categorizations directly
-     * based on confidence threshold.
-     * 
-     * @param string $post_type            Post type to process
-     * @param string $taxonomy             Taxonomy to use for categorization
-     * @param int    $limit                Maximum items to process
-     * @param bool   $preview_mode         Whether to preview instead of save
-     * @param bool   $ignore_categorized   Skip already categorized items
-     * @param int    $confidence_threshold Minimum confidence for auto-save
-     * @param string $date_from            Optional start date filter
-     * @param string $date_to              Optional end date filter
-     * @param string $exclude_taxonomy     Optional taxonomy exclusion filter
-     * @return array Processing results
+     * Chunked preview – returns one page of analysed items for the JS
+     * to append incrementally.
+     *
+     * @param array $params POST parameters (includes offset, chunk_size)
+     * @return array JSON-ready response
      */
-    private function process_items($post_type, $taxonomy, $limit, $preview_mode, $ignore_categorized, $confidence_threshold, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
-        // Fetch posts matching criteria
-        $posts = $this->get_posts($post_type, $taxonomy, $limit, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy);
-        
-        // Handle empty results
-        if (empty($posts)) {
+    public function process_preview_chunk($params) {
+        $post_type          = isset($params['post_type']) ? sanitize_text_field($params['post_type']) : '';
+        $taxonomy           = isset($params['taxonomy']) ? sanitize_text_field($params['taxonomy']) : '';
+        $ignore_categorized = isset($params['ignore_categorized']) && $params['ignore_categorized'] === 'true';
+        $date_from          = isset($params['date_from']) ? sanitize_text_field($params['date_from']) : '';
+        $date_to            = isset($params['date_to']) ? sanitize_text_field($params['date_to']) : '';
+        $exclude_taxonomy   = isset($params['exclude_taxonomy']) ? sanitize_text_field($params['exclude_taxonomy']) : '';
+        $offset             = isset($params['offset']) ? max(0, intval($params['offset'])) : 0;
+        $chunk_size         = isset($params['chunk_size']) ? min(20, max(1, intval($params['chunk_size']))) : $this->preview_chunk_size;
+
+        if (empty($post_type) || empty($taxonomy)) {
+            return array('success' => false, 'data' => __('Post type and taxonomy required.', 'asae-taxonomy-organizer'));
+        }
+
+        // Total matching items (for progress bar)
+        $total = $this->count_posts($post_type, $taxonomy, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy);
+        // Cap at preview limit
+        $total = min($total, $this->preview_limit);
+
+        if ($total === 0 || $offset >= $total) {
             return array(
                 'success' => true,
-                'message' => __('No content found matching your criteria.', 'asae-taxonomy-organizer'),
-                'results' => array(),
-                'preview_mode' => $preview_mode
+                'data'    => array('results' => array(), 'total' => $total, 'has_more' => false, 'all_terms' => array()),
             );
         }
-        
-        // Initialize the analyzer and get available terms
+
+        // Clamp chunk to remaining items
+        $remaining  = $total - $offset;
+        $chunk_size = min($chunk_size, $remaining);
+
+        $posts = $this->get_posts_paged($post_type, $taxonomy, $chunk_size, $offset, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy);
+
         $ai_analyzer = new ASAE_TO_AI_Analyzer();
-        $terms = get_terms(array(
-            'taxonomy' => $taxonomy,
-            'hide_empty' => false,
-        ));
-        
-        // Validate we have terms to work with
+        $terms = get_terms(array('taxonomy' => $taxonomy, 'hide_empty' => false));
         if (is_wp_error($terms) || empty($terms)) {
-            return array(
-                'success' => false,
-                'message' => __('No terms found in the selected taxonomy.', 'asae-taxonomy-organizer')
-            );
+            return array('success' => false, 'data' => __('No terms found in the selected taxonomy.', 'asae-taxonomy-organizer'));
         }
-        
+
         $results = array();
-        $auto_saved = 0;
-        $needs_review = 0;
-        
-        // Process each post
         foreach ($posts as $post) {
-            // Run content through the analyzer
-            $analysis = $ai_analyzer->analyze_content($post, $terms);
-            
-            // Build result object with all relevant data
-            $result = array(
-                'post_id' => $post->ID,
-                'title' => $post->post_title,
-                'post_date' => $post->post_date,
+            try {
+                $analysis = $ai_analyzer->analyze_content($post, $terms);
+            } catch (\Exception $e) {
+                error_log('ASAE Taxonomy Organizer: Exception analysing post ' . $post->ID . ' – ' . $e->getMessage());
+                $analysis = null;
+            }
+
+            // If rate-limited, stop this chunk and tell JS to pause
+            if ($ai_analyzer->last_status === 'rate_limited') {
+                return array(
+                    'success' => true,
+                    'data'    => array(
+                        'results'      => $results,
+                        'total'        => $total,
+                        'has_more'     => true,
+                        'rate_limited' => true,
+                        'all_terms'    => ($offset === 0) ? $this->simplify_terms($terms) : array(),
+                    ),
+                );
+            }
+
+            $results[] = array(
+                'post_id'            => $post->ID,
+                'title'              => $post->post_title,
+                'post_date'          => $post->post_date,
                 'suggested_category' => $analysis ? $analysis['term']->name : __('Unable to determine', 'asae-taxonomy-organizer'),
-                'term_id' => $analysis ? $analysis['term']->term_id : null,
-                'confidence' => $analysis ? $analysis['confidence'] : 0,
-                'confidence_level' => $analysis ? $analysis['confidence_level'] : 'low',
-                'saved' => false,
-                'needs_review' => true
+                'term_id'            => $analysis ? $analysis['term']->term_id : null,
+                'confidence'         => $analysis ? $analysis['confidence'] : 0,
+                'confidence_level'   => $analysis ? $analysis['confidence_level'] : 'low',
+                'saved'              => false,
+                'needs_review'       => true,
             );
-            
-            // In non-preview mode, auto-save items above confidence threshold
-            if (!$preview_mode && $analysis) {
-                if ($analysis['confidence'] >= $confidence_threshold) {
-                    // Append term to post (true = append, not replace)
-                    $set_result = wp_set_object_terms($post->ID, $analysis['term']->term_id, $taxonomy, true);
-                    $result['saved'] = !is_wp_error($set_result);
-                    $result['needs_review'] = false;
-                    $auto_saved++;
-                } else {
-                    $needs_review++;
-                }
-            } else {
-                $needs_review++;
-            }
-            
-            $results[] = $result;
         }
-        
-        // Construct appropriate message based on mode and results
-        $message = '';
-        if ($preview_mode) {
-            $message = sprintf(
-                __('Analysis complete. %d items ready for review.', 'asae-taxonomy-organizer'), 
-                count($results)
-            );
-        } else {
-            if ($auto_saved > 0 && $needs_review > 0) {
-                $message = sprintf(
-                    __('%d items auto-saved (above %d%% confidence). %d items need review.', 'asae-taxonomy-organizer'), 
-                    $auto_saved, 
-                    $confidence_threshold, 
-                    $needs_review
-                );
-            } elseif ($auto_saved > 0) {
-                $message = sprintf(
-                    __('%d items categorized successfully.', 'asae-taxonomy-organizer'), 
-                    $auto_saved
-                );
-            } else {
-                $message = sprintf(
-                    __('%d items analyzed. All need review (below %d%% confidence threshold).', 'asae-taxonomy-organizer'), 
-                    count($results), 
-                    $confidence_threshold
-                );
-            }
-        }
-        
+
+        $has_more = ($offset + count($results)) < $total;
+
         return array(
             'success' => true,
-            'message' => $message,
-            'results' => $results,
-            'preview_mode' => $preview_mode,
-            'auto_saved' => $auto_saved,
-            'needs_review' => $needs_review,
-            'taxonomy' => $taxonomy,
-            'all_terms' => array_map(function($t) {
-                return array('term_id' => $t->term_id, 'name' => $t->name);
-            }, $terms)
+            'data'    => array(
+                'results'   => $results,
+                'total'     => $total,
+                'has_more'  => $has_more,
+                'all_terms' => ($offset === 0) ? $this->simplify_terms($terms) : array(),
+            ),
         );
     }
-    
+
     /**
-     * Save items that the user has approved
-     * 
-     * Called from preview mode when the user approves one or more categorizations.
-     * Each item is assigned to its taxonomy term.
-     * 
-     * @param array $params Contains 'items' array and 'taxonomy' string
-     * @return array Result with count of saved items
+     * Return a cost estimate for a planned processing run.
+     *
+     * @param array $params Same filter params as process()
+     * @return array
+     */
+    public function get_cost_estimate($params) {
+        $post_type          = isset($params['post_type']) ? sanitize_text_field($params['post_type']) : '';
+        $taxonomy           = isset($params['taxonomy']) ? sanitize_text_field($params['taxonomy']) : '';
+        $items_count        = isset($params['items_count']) ? sanitize_text_field($params['items_count']) : '10';
+        $ignore_categorized = isset($params['ignore_categorized']) && $params['ignore_categorized'] === 'true';
+        $date_from          = isset($params['date_from']) ? sanitize_text_field($params['date_from']) : '';
+        $date_to            = isset($params['date_to']) ? sanitize_text_field($params['date_to']) : '';
+        $exclude_taxonomy   = isset($params['exclude_taxonomy']) ? sanitize_text_field($params['exclude_taxonomy']) : '';
+
+        $total = $this->count_posts($post_type, $taxonomy, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy);
+
+        if ($items_count !== 'all') {
+            $total = min($total, intval($items_count));
+        }
+
+        $use_ai  = get_option('asae_to_use_ai', 'no') === 'yes';
+        $api_key = get_option('asae_to_openai_api_key', '');
+        $ai_available = $use_ai && !empty($api_key);
+
+        $estimate = ASAE_TO_AI_Analyzer::estimate_cost($total);
+        $usage    = ASAE_TO_AI_Analyzer::get_monthly_usage();
+
+        $budget_exceeded = false;
+        if ($usage['limit'] > 0) {
+            $budget_exceeded = ($usage['used'] + $total) > $usage['limit'];
+        }
+
+        return array(
+            'count'           => $total,
+            'ai_enabled'      => $ai_available,
+            'model'           => $estimate['model'],
+            'estimated_cost'  => $ai_available ? number_format($estimate['cost'], 4) : '0.00',
+            'remaining_calls' => $usage['limit'] > 0 ? max(0, $usage['limit'] - $usage['used']) : null,
+            'monthly_limit'   => $usage['limit'],
+            'budget_exceeded' => $budget_exceeded,
+        );
+    }
+
+    /**
+     * Save user-approved items.
+     *
+     * @param array $params { taxonomy: string, items: array }
+     * @return array
      */
     public function save_approved_items($params) {
-        $items = isset($params['items']) ? $params['items'] : array();
+        $items    = isset($params['items']) ? $params['items'] : array();
         $taxonomy = isset($params['taxonomy']) ? sanitize_text_field($params['taxonomy']) : '';
-        
-        // Validate inputs
+
         if (empty($items) || empty($taxonomy)) {
-            return array(
-                'success' => false,
-                'message' => __('No items to save.', 'asae-taxonomy-organizer')
-            );
+            return array('success' => false, 'message' => __('No items to save.', 'asae-taxonomy-organizer'));
         }
-        
         if (!taxonomy_exists($taxonomy)) {
-            return array(
-                'success' => false,
-                'message' => __('Invalid taxonomy.', 'asae-taxonomy-organizer')
-            );
+            return array('success' => false, 'message' => __('Invalid taxonomy.', 'asae-taxonomy-organizer'));
         }
-        
-        $saved = 0;
+
+        $saved  = 0;
         $failed = 0;
-        
-        // Process each approved item
+
         foreach ($items as $item) {
-            // Validate and sanitize item data
             $post_id = isset($item['post_id']) ? intval($item['post_id']) : 0;
             $term_id = isset($item['term_id']) ? intval($item['term_id']) : 0;
-            
+
             if ($post_id > 0 && $term_id > 0) {
-                // Verify post exists
                 if (get_post_status($post_id) !== false) {
-                    // Verify term exists in this taxonomy
                     $term = get_term($term_id, $taxonomy);
                     if (!is_wp_error($term) && $term) {
                         $result = wp_set_object_terms($post_id, $term_id, $taxonomy, true);
@@ -318,232 +255,54 @@ class ASAE_TO_Processor {
                 }
             }
         }
-        
+
         return array(
             'success' => true,
             'message' => sprintf(__('%d items saved successfully.', 'asae-taxonomy-organizer'), $saved),
-            'saved' => $saved,
-            'failed' => $failed
+            'saved'   => $saved,
+            'failed'  => $failed,
         );
     }
-    
+
+    // =========================================================================
+    // Batch processing
+    // =========================================================================
+
     /**
-     * Start a batch processing job
-     * 
-     * For large content sets, we use background processing via WP-Cron to avoid
-     * timeouts. This method creates the batch record and schedules the first chunk.
-     * 
-     * @param string $post_type            Post type to process
-     * @param string $taxonomy             Target taxonomy
-     * @param bool   $ignore_categorized   Skip categorized items
-     * @param string $date_from            Date range start
-     * @param string $date_to              Date range end
-     * @param string $exclude_taxonomy     Taxonomy to exclude
-     * @param int    $confidence_threshold Auto-save threshold
-     * @return array Response with batch info
-     */
-    private function start_batch_process($post_type, $taxonomy, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '', $confidence_threshold = 0) {
-        $batch_manager = new ASAE_TO_Batch_Manager();
-        
-        // Count total items to process
-        $total_items = $this->count_posts($post_type, $taxonomy, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy);
-        
-        if ($total_items === 0) {
-            return array(
-                'success' => true,
-                'message' => __('No content found matching your criteria.', 'asae-taxonomy-organizer'),
-                'results' => array(),
-                'preview_mode' => false
-            );
-        }
-        
-        // Create the batch record
-        $batch_id = $batch_manager->create_batch(
-            $post_type, 
-            $taxonomy, 
-            $total_items, 
-            $ignore_categorized, 
-            $date_from, 
-            $date_to, 
-            $exclude_taxonomy, 
-            $confidence_threshold
-        );
-        
-        // Schedule the first processing chunk
-        $batch_manager->schedule_batch($batch_id);
-        
-        return array(
-            'success' => true,
-            'message' => sprintf(
-                __('Batch process started. %d items will be processed in the background.', 'asae-taxonomy-organizer'),
-                $total_items
-            ),
-            'batch_id' => $batch_id,
-            'total_items' => $total_items,
-            'is_batch' => true
-        );
-    }
-    
-    /**
-     * Get posts matching the specified criteria
-     * 
-     * Builds and executes a WP_Query with all the filtering options. This is
-     * used for direct processing (not batch mode).
-     * 
-     * @param string $post_type          Post type
-     * @param string $taxonomy           Target taxonomy
-     * @param int    $limit              Maximum posts to return
-     * @param bool   $ignore_categorized Skip categorized items
-     * @param string $date_from          Date range start
-     * @param string $date_to            Date range end
-     * @param string $exclude_taxonomy   Taxonomy to exclude
-     * @return array Array of WP_Post objects
-     */
-    private function get_posts($post_type, $taxonomy, $limit, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
-        $args = array(
-            'post_type' => $post_type,
-            'post_status' => 'publish',
-            'posts_per_page' => $limit,
-            'orderby' => 'date',
-            'order' => 'ASC', // Process oldest first
-        );
-        
-        // Build taxonomy query for filtering
-        $tax_query = array('relation' => 'AND');
-        
-        if ($ignore_categorized) {
-            $tax_query[] = array(
-                'taxonomy' => $taxonomy,
-                'operator' => 'NOT EXISTS', // Posts without any term in this taxonomy
-            );
-        }
-        
-        if (!empty($exclude_taxonomy) && taxonomy_exists($exclude_taxonomy)) {
-            $tax_query[] = array(
-                'taxonomy' => $exclude_taxonomy,
-                'operator' => 'NOT EXISTS',
-            );
-        }
-        
-        // Only add tax_query if we have conditions
-        if (count($tax_query) > 1) {
-            $args['tax_query'] = $tax_query;
-        }
-        
-        // Build date query for date range filtering
-        if (!empty($date_from) || !empty($date_to)) {
-            $date_query = array();
-            
-            if (!empty($date_from)) {
-                // Validate date format
-                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) {
-                    $date_query['after'] = $date_from;
-                }
-            }
-            
-            if (!empty($date_to)) {
-                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to)) {
-                    $date_query['before'] = $date_to . ' 23:59:59';
-                }
-            }
-            
-            if (!empty($date_query)) {
-                $date_query['inclusive'] = true;
-                $args['date_query'] = array($date_query);
-            }
-        }
-        
-        $query = new WP_Query($args);
-        
-        return $query->posts;
-    }
-    
-    /**
-     * Count posts matching criteria (for batch total)
-     * 
-     * @param string $post_type          Post type
-     * @param string $taxonomy           Target taxonomy
-     * @param bool   $ignore_categorized Skip categorized items
-     * @param string $date_from          Date range start
-     * @param string $date_to            Date range end
-     * @param string $exclude_taxonomy   Taxonomy to exclude
-     * @return int Number of matching posts
-     */
-    private function count_posts($post_type, $taxonomy, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
-        $args = array(
-            'post_type' => $post_type,
-            'post_status' => 'publish',
-            'posts_per_page' => -1,
-            'fields' => 'ids', // Only fetch IDs for efficiency
-        );
-        
-        $tax_query = array('relation' => 'AND');
-        
-        if ($ignore_categorized) {
-            $tax_query[] = array(
-                'taxonomy' => $taxonomy,
-                'operator' => 'NOT EXISTS',
-            );
-        }
-        
-        if (!empty($exclude_taxonomy) && taxonomy_exists($exclude_taxonomy)) {
-            $tax_query[] = array(
-                'taxonomy' => $exclude_taxonomy,
-                'operator' => 'NOT EXISTS',
-            );
-        }
-        
-        if (count($tax_query) > 1) {
-            $args['tax_query'] = $tax_query;
-        }
-        
-        if (!empty($date_from) || !empty($date_to)) {
-            $date_query = array();
-            
-            if (!empty($date_from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) {
-                $date_query['after'] = $date_from;
-            }
-            
-            if (!empty($date_to) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to)) {
-                $date_query['before'] = $date_to . ' 23:59:59';
-            }
-            
-            if (!empty($date_query)) {
-                $date_query['inclusive'] = true;
-                $args['date_query'] = array($date_query);
-            }
-        }
-        
-        $query = new WP_Query($args);
-        
-        return $query->found_posts;
-    }
-    
-    /**
-     * Process a single chunk of a batch job
-     * 
-     * This is called by WP-Cron to process the next set of items in a batch.
-     * After processing, it either marks the batch complete or schedules the
-     * next chunk.
-     * 
-     * @param string $batch_id The batch identifier
-     * @return bool True on success
+     * Process one chunk of a batch job (called by WP-Cron).
+     *
+     * Resilience features:
+     * - Lock to prevent overlapping execution
+     * - Next chunk pre-scheduled before processing starts
+     * - Per-item progress saves
+     * - Try-catch per item
+     * - Rate-limit awareness: pauses batch with backoff
+     *
+     * @param string $batch_id
+     * @return bool
      */
     public function process_batch_chunk($batch_id) {
         global $wpdb;
         $table_name = $wpdb->prefix . 'asae_to_batches';
-        
-        // Fetch batch record using prepared statement for security
+
+        // Transient-based lock to prevent overlapping cron executions
+        $lock_key = 'asae_to_lock_' . $batch_id;
+        if (get_transient($lock_key)) {
+            return false;
+        }
+        set_transient($lock_key, true, 300); // 5-minute expiry
+
         $batch = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM $table_name WHERE batch_id = %s AND status IN ('pending', 'processing')",
             $batch_id
         ));
-        
+
         if (!$batch) {
+            delete_transient($lock_key);
             return false;
         }
-        
-        // Update status to processing
+
+        // Mark processing
         $wpdb->update(
             $table_name,
             array('status' => 'processing', 'updated_at' => current_time('mysql')),
@@ -551,13 +310,17 @@ class ASAE_TO_Processor {
             array('%s', '%s'),
             array('%s')
         );
-        
-        // Extract batch configuration
-        $ignore_categorized = (bool) $batch->ignore_categorized;
-        $current_processed = intval($batch->processed_items);
-        $confidence_threshold = isset($batch->confidence_threshold) ? intval($batch->confidence_threshold) : 0;
-        
-        // Fetch next chunk of posts
+
+        // Pre-schedule the NEXT chunk now, so a crash in this chunk doesn't
+        // break the cron chain.  We cancel it at the end if the batch is done.
+        $batch_manager = new ASAE_TO_Batch_Manager();
+        $batch_manager->schedule_batch($batch_id, 30); // 30-second gap
+
+        $ignore_categorized   = (bool) $batch->ignore_categorized;
+        $current_processed    = intval($batch->processed_items);
+        $confidence_threshold = intval($batch->confidence_threshold);
+        $current_api_calls    = intval($batch->api_calls_made);
+
         $posts = $this->get_batch_posts(
             $batch->post_type,
             $batch->taxonomy,
@@ -568,81 +331,81 @@ class ASAE_TO_Processor {
             isset($batch->date_to) ? $batch->date_to : '',
             isset($batch->exclude_taxonomy) ? $batch->exclude_taxonomy : ''
         );
-        
-        // If no more posts, mark batch complete
+
+        // No posts left → complete
         if (empty($posts)) {
-            $wpdb->update(
-                $table_name,
-                array('status' => 'completed', 'updated_at' => current_time('mysql')),
-                array('batch_id' => $batch_id),
-                array('%s', '%s'),
-                array('%s')
-            );
+            $this->complete_batch($batch_id, $batch_manager, $lock_key);
             return true;
         }
-        
-        // Initialize analyzer and get terms
+
         $ai_analyzer = new ASAE_TO_AI_Analyzer();
-        $terms = get_terms(array(
-            'taxonomy' => $batch->taxonomy,
-            'hide_empty' => false,
-        ));
-        
-        // Process each post in the chunk
-        $processed = 0;
+        $terms = get_terms(array('taxonomy' => $batch->taxonomy, 'hide_empty' => false));
+
+        if (is_wp_error($terms) || empty($terms)) {
+            delete_transient($lock_key);
+            return false;
+        }
+
+        $processed      = 0;
+        $api_calls_made = 0;
+
         foreach ($posts as $post) {
-            $analysis = $ai_analyzer->analyze_content($post, $terms);
-            
-            // Only save if analysis succeeded and confidence meets threshold
+            try {
+                $analysis = $ai_analyzer->analyze_content($post, $terms);
+            } catch (\Exception $e) {
+                error_log('ASAE Taxonomy Organizer: Exception on post ' . $post->ID . ' – ' . $e->getMessage());
+                $analysis = null;
+            }
+
+            // Rate-limited by OpenAI: save progress so far, reschedule with backoff
+            if ($ai_analyzer->last_status === 'rate_limited') {
+                $this->save_batch_progress($batch_id, $current_processed + $processed, $current_api_calls + $api_calls_made);
+                // Cancel the pre-scheduled event and reschedule with longer delay
+                $batch_manager->cancel_scheduled($batch_id);
+                $batch_manager->schedule_batch($batch_id, 60); // 60-second backoff
+                delete_transient($lock_key);
+                return true;
+            }
+
             if ($analysis && $analysis['confidence'] >= $confidence_threshold) {
                 wp_set_object_terms($post->ID, $analysis['term']->term_id, $batch->taxonomy, true);
             }
-            
+
+            // Track API call if AI was used
+            if (get_option('asae_to_use_ai', 'no') === 'yes' && !empty(get_option('asae_to_openai_api_key', ''))) {
+                $api_calls_made++;
+            }
+
             $processed++;
+
+            // Per-item progress save
+            $this->save_batch_progress($batch_id, $current_processed + $processed, $current_api_calls + $api_calls_made);
         }
-        
-        // Update progress
-        $new_processed = $current_processed + $processed;
-        $wpdb->update(
-            $table_name,
-            array(
-                'processed_items' => $new_processed,
-                'updated_at' => current_time('mysql')
-            ),
-            array('batch_id' => $batch_id),
-            array('%d', '%s'),
-            array('%s')
-        );
-        
-        // Check if we're done
+
+        // Check completion
+        $done = false;
         if ($ignore_categorized) {
-            // When ignoring categorized, the pool shrinks as we process
             $remaining = $this->count_posts(
-                $batch->post_type, 
-                $batch->taxonomy, 
-                true,
+                $batch->post_type, $batch->taxonomy, true,
                 isset($batch->date_from) ? $batch->date_from : '',
                 isset($batch->date_to) ? $batch->date_to : '',
                 isset($batch->exclude_taxonomy) ? $batch->exclude_taxonomy : ''
             );
-            
             if ($remaining === 0) {
+                $done = true;
+                $new_processed = $current_processed + $processed;
                 $wpdb->update(
                     $table_name,
-                    array(
-                        'status' => 'completed',
-                        'total_items' => $new_processed,
-                        'updated_at' => current_time('mysql')
-                    ),
+                    array('total_items' => $new_processed, 'status' => 'completed', 'updated_at' => current_time('mysql')),
                     array('batch_id' => $batch_id),
-                    array('%s', '%d', '%s'),
+                    array('%d', '%s', '%s'),
                     array('%s')
                 );
-                return true;
             }
         } else {
-            // Fixed pool size
+            $new_processed = $current_processed + $processed;
             if ($new_processed >= $batch->total_items) {
+                $done = true;
                 $wpdb->update(
                     $table_name,
                     array('status' => 'completed', 'updated_at' => current_time('mysql')),
@@ -650,92 +413,286 @@ class ASAE_TO_Processor {
                     array('%s', '%s'),
                     array('%s')
                 );
-                return true;
             }
         }
-        
-        // Schedule next chunk
-        $batch_manager = new ASAE_TO_Batch_Manager();
-        $batch_manager->schedule_batch($batch_id);
-        
+
+        if ($done) {
+            $batch_manager->cancel_scheduled($batch_id);
+        }
+
+        delete_transient($lock_key);
         return true;
     }
-    
+
+    // =========================================================================
+    // Private helpers
+    // =========================================================================
+
     /**
-     * Get posts for batch processing
-     * 
-     * Similar to get_posts but handles offset for batch pagination.
-     * 
-     * @param string $post_type          Post type
-     * @param string $taxonomy           Target taxonomy
-     * @param int    $limit              Chunk size
-     * @param int    $offset             Current offset
-     * @param bool   $ignore_categorized Skip categorized
-     * @param string $date_from          Date range start
-     * @param string $date_to            Date range end
-     * @param string $exclude_taxonomy   Taxonomy to exclude
-     * @return array Array of WP_Post objects
+     * Process items synchronously (non-batch, non-chunked-preview).
+     * Used for direct-save mode with a specific count.
      */
+    private function process_items($post_type, $taxonomy, $limit, $preview_mode, $ignore_categorized, $confidence_threshold, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
+        $posts = $this->get_posts($post_type, $taxonomy, $limit, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy);
+
+        if (empty($posts)) {
+            return array('success' => true, 'message' => __('No content found matching your criteria.', 'asae-taxonomy-organizer'), 'results' => array(), 'preview_mode' => $preview_mode);
+        }
+
+        $ai_analyzer = new ASAE_TO_AI_Analyzer();
+        $terms = get_terms(array('taxonomy' => $taxonomy, 'hide_empty' => false));
+
+        if (is_wp_error($terms) || empty($terms)) {
+            return array('success' => false, 'message' => __('No terms found in the selected taxonomy.', 'asae-taxonomy-organizer'));
+        }
+
+        $results      = array();
+        $auto_saved   = 0;
+        $needs_review = 0;
+
+        foreach ($posts as $post) {
+            try {
+                $analysis = $ai_analyzer->analyze_content($post, $terms);
+            } catch (\Exception $e) {
+                error_log('ASAE Taxonomy Organizer: Exception on post ' . $post->ID . ' – ' . $e->getMessage());
+                $analysis = null;
+            }
+
+            $result = array(
+                'post_id'            => $post->ID,
+                'title'              => $post->post_title,
+                'post_date'          => $post->post_date,
+                'suggested_category' => $analysis ? $analysis['term']->name : __('Unable to determine', 'asae-taxonomy-organizer'),
+                'term_id'            => $analysis ? $analysis['term']->term_id : null,
+                'confidence'         => $analysis ? $analysis['confidence'] : 0,
+                'confidence_level'   => $analysis ? $analysis['confidence_level'] : 'low',
+                'saved'              => false,
+                'needs_review'       => true,
+            );
+
+            if (!$preview_mode && $analysis) {
+                if ($analysis['confidence'] >= $confidence_threshold) {
+                    $set_result = wp_set_object_terms($post->ID, $analysis['term']->term_id, $taxonomy, true);
+                    $result['saved']        = !is_wp_error($set_result);
+                    $result['needs_review'] = false;
+                    $auto_saved++;
+                } else {
+                    $needs_review++;
+                }
+            } else {
+                $needs_review++;
+            }
+
+            $results[] = $result;
+        }
+
+        $message = '';
+        if ($preview_mode) {
+            $message = sprintf(__('Analysis complete. %d items ready for review.', 'asae-taxonomy-organizer'), count($results));
+        } else {
+            if ($auto_saved > 0 && $needs_review > 0) {
+                $message = sprintf(__('%d items auto-saved (above %d%% confidence). %d items need review.', 'asae-taxonomy-organizer'), $auto_saved, $confidence_threshold, $needs_review);
+            } elseif ($auto_saved > 0) {
+                $message = sprintf(__('%d items categorized successfully.', 'asae-taxonomy-organizer'), $auto_saved);
+            } else {
+                $message = sprintf(__('%d items analyzed. All need review (below %d%% confidence threshold).', 'asae-taxonomy-organizer'), count($results), $confidence_threshold);
+            }
+        }
+
+        return array(
+            'success'      => true,
+            'message'      => $message,
+            'results'      => $results,
+            'preview_mode' => $preview_mode,
+            'auto_saved'   => $auto_saved,
+            'needs_review' => $needs_review,
+            'taxonomy'     => $taxonomy,
+            'all_terms'    => $this->simplify_terms($terms),
+        );
+    }
+
+    /**
+     * Start a background batch job.
+     */
+    private function start_batch_process($post_type, $taxonomy, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '', $confidence_threshold = 0) {
+        $batch_manager = new ASAE_TO_Batch_Manager();
+        $total_items   = $this->count_posts($post_type, $taxonomy, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy);
+
+        if ($total_items === 0) {
+            return array('success' => true, 'message' => __('No content found matching your criteria.', 'asae-taxonomy-organizer'), 'results' => array(), 'preview_mode' => false);
+        }
+
+        $batch_id = $batch_manager->create_batch($post_type, $taxonomy, $total_items, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy, $confidence_threshold);
+        $batch_manager->schedule_batch($batch_id);
+
+        return array(
+            'success'     => true,
+            'message'     => sprintf(__('Batch process started. %d items will be processed in the background.', 'asae-taxonomy-organizer'), $total_items),
+            'batch_id'    => $batch_id,
+            'total_items' => $total_items,
+            'is_batch'    => true,
+        );
+    }
+
+    /**
+     * Atomically save batch progress to the database.
+     */
+    private function save_batch_progress($batch_id, $processed_items, $api_calls_made) {
+        global $wpdb;
+        $wpdb->update(
+            $wpdb->prefix . 'asae_to_batches',
+            array(
+                'processed_items' => $processed_items,
+                'api_calls_made'  => $api_calls_made,
+                'updated_at'      => current_time('mysql'),
+            ),
+            array('batch_id' => $batch_id),
+            array('%d', '%d', '%s'),
+            array('%s')
+        );
+    }
+
+    /**
+     * Mark a batch as completed and clean up.
+     */
+    private function complete_batch($batch_id, $batch_manager, $lock_key) {
+        global $wpdb;
+        $wpdb->update(
+            $wpdb->prefix . 'asae_to_batches',
+            array('status' => 'completed', 'updated_at' => current_time('mysql')),
+            array('batch_id' => $batch_id),
+            array('%s', '%s'),
+            array('%s')
+        );
+        $batch_manager->cancel_scheduled($batch_id);
+        delete_transient($lock_key);
+    }
+
+    /**
+     * Convert WP_Term array to simple arrays for JSON.
+     */
+    private function simplify_terms($terms) {
+        return array_map(function ($t) {
+            return array('term_id' => $t->term_id, 'name' => $t->name);
+        }, $terms);
+    }
+
+    // =========================================================================
+    // WP_Query helpers
+    // =========================================================================
+
+    private function get_posts($post_type, $taxonomy, $limit, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
+        $args = array(
+            'post_type'      => $post_type,
+            'post_status'    => 'publish',
+            'posts_per_page' => $limit,
+            'orderby'        => 'date',
+            'order'          => 'ASC',
+        );
+        $args = $this->apply_tax_query($args, $taxonomy, $ignore_categorized, $exclude_taxonomy);
+        $args = $this->apply_date_query($args, $date_from, $date_to);
+
+        return (new WP_Query($args))->posts;
+    }
+
+    /**
+     * Paginated query for chunked preview.
+     */
+    private function get_posts_paged($post_type, $taxonomy, $limit, $offset, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
+        $args = array(
+            'post_type'      => $post_type,
+            'post_status'    => 'publish',
+            'posts_per_page' => $limit,
+            'offset'         => $offset,
+            'orderby'        => 'date',
+            'order'          => 'ASC',
+        );
+        $args = $this->apply_tax_query($args, $taxonomy, $ignore_categorized, $exclude_taxonomy);
+        $args = $this->apply_date_query($args, $date_from, $date_to);
+
+        return (new WP_Query($args))->posts;
+    }
+
     private function get_batch_posts($post_type, $taxonomy, $limit, $offset, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
         $args = array(
-            'post_type' => $post_type,
-            'post_status' => 'publish',
+            'post_type'      => $post_type,
+            'post_status'    => 'publish',
             'posts_per_page' => $limit,
-            'orderby' => 'date',
-            'order' => 'ASC',
+            'orderby'        => 'date',
+            'order'          => 'ASC',
         );
-        
-        $tax_query = array('relation' => 'AND');
-        
+
         if ($ignore_categorized) {
-            // When ignoring categorized, we always get the first N uncategorized
-            // (no offset needed since pool shrinks)
-            $tax_query[] = array(
-                'taxonomy' => $taxonomy,
-                'operator' => 'NOT EXISTS',
-            );
+            $args = $this->apply_tax_query($args, $taxonomy, true, $exclude_taxonomy);
+            // No offset needed: pool shrinks as items are categorised
         } else {
-            // Fixed pool, use offset for pagination
             $args['offset'] = $offset;
+            $args = $this->apply_tax_query($args, $taxonomy, false, $exclude_taxonomy);
         }
-        
+
+        $args = $this->apply_date_query($args, $date_from, $date_to);
+
+        return (new WP_Query($args))->posts;
+    }
+
+    /**
+     * Count matching posts.
+     */
+    public function count_posts($post_type, $taxonomy, $ignore_categorized, $date_from = '', $date_to = '', $exclude_taxonomy = '') {
+        $args = array(
+            'post_type'      => $post_type,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        );
+        $args = $this->apply_tax_query($args, $taxonomy, $ignore_categorized, $exclude_taxonomy);
+        $args = $this->apply_date_query($args, $date_from, $date_to);
+
+        return (new WP_Query($args))->found_posts;
+    }
+
+    /**
+     * Shared: build tax_query from filter flags.
+     */
+    private function apply_tax_query($args, $taxonomy, $ignore_categorized, $exclude_taxonomy = '') {
+        $tax_query = array('relation' => 'AND');
+
+        if ($ignore_categorized) {
+            $tax_query[] = array('taxonomy' => $taxonomy, 'operator' => 'NOT EXISTS');
+        }
         if (!empty($exclude_taxonomy) && taxonomy_exists($exclude_taxonomy)) {
-            $tax_query[] = array(
-                'taxonomy' => $exclude_taxonomy,
-                'operator' => 'NOT EXISTS',
-            );
+            $tax_query[] = array('taxonomy' => $exclude_taxonomy, 'operator' => 'NOT EXISTS');
         }
-        
+
         if (count($tax_query) > 1) {
             $args['tax_query'] = $tax_query;
-        } elseif ($ignore_categorized) {
-            $args['tax_query'] = array(
-                array(
-                    'taxonomy' => $taxonomy,
-                    'operator' => 'NOT EXISTS',
-                ),
-            );
         }
-        
-        if (!empty($date_from) || !empty($date_to)) {
-            $date_query = array();
-            
-            if (!empty($date_from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) {
-                $date_query['after'] = $date_from;
-            }
-            
-            if (!empty($date_to) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to)) {
-                $date_query['before'] = $date_to . ' 23:59:59';
-            }
-            
-            if (!empty($date_query)) {
-                $date_query['inclusive'] = true;
-                $args['date_query'] = array($date_query);
-            }
+
+        return $args;
+    }
+
+    /**
+     * Shared: build date_query from filter strings.
+     */
+    private function apply_date_query($args, $date_from, $date_to) {
+        if (empty($date_from) && empty($date_to)) {
+            return $args;
         }
-        
-        $query = new WP_Query($args);
-        
-        return $query->posts;
+
+        $date_query = array();
+
+        if (!empty($date_from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) {
+            $date_query['after'] = $date_from;
+        }
+        if (!empty($date_to) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to)) {
+            $date_query['before'] = $date_to . ' 23:59:59';
+        }
+
+        if (!empty($date_query)) {
+            $date_query['inclusive'] = true;
+            $args['date_query']     = array($date_query);
+        }
+
+        return $args;
     }
 }

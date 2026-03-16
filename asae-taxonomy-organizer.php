@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.0.4
+ * Version: 0.1.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.0.4');
+define('ASAE_TO_VERSION', '0.1.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -161,9 +161,14 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_get_terms', array($this, 'ajax_get_terms'));
         add_action('wp_ajax_asae_to_log_rejection', array($this, 'ajax_log_rejection'));
         
+        // AJAX handlers for chunked preview and cost estimate
+        add_action('wp_ajax_asae_to_process_preview_chunk', array($this, 'ajax_process_preview_chunk'));
+        add_action('wp_ajax_asae_to_get_cost_estimate', array($this, 'ajax_get_cost_estimate'));
+
         // AJAX handlers for the Settings page
         add_action('wp_ajax_asae_to_save_settings', array($this, 'ajax_save_settings'));
         add_action('wp_ajax_asae_to_test_connection', array($this, 'ajax_test_connection'));
+        add_action('wp_ajax_asae_to_reset_usage', array($this, 'ajax_reset_usage'));
         
         // Plugin lifecycle hooks
         register_activation_hook(__FILE__, array($this, 'activate'));
@@ -179,6 +184,7 @@ class ASAE_Taxonomy_Organizer {
     public function activate() {
         $this->create_batch_table();
         $this->create_feedback_table();
+        $this->maybe_migrate_batch_table();
         flush_rewrite_rules();
     }
     
@@ -215,6 +221,7 @@ class ASAE_Taxonomy_Organizer {
             taxonomy varchar(100) NOT NULL,
             total_items int(11) NOT NULL DEFAULT 0,
             processed_items int(11) NOT NULL DEFAULT 0,
+            api_calls_made int(11) NOT NULL DEFAULT 0,
             status varchar(20) NOT NULL DEFAULT 'pending',
             ignore_categorized tinyint(1) NOT NULL DEFAULT 1,
             date_from date DEFAULT NULL,
@@ -260,7 +267,19 @@ class ASAE_Taxonomy_Organizer {
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
     }
-    
+
+    /**
+     * Add api_calls_made column if upgrading from a version that lacks it.
+     */
+    private function maybe_migrate_batch_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'asae_to_batches';
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name", 0);
+        if (!empty($columns) && !in_array('api_calls_made', $columns, true)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN api_calls_made int(11) NOT NULL DEFAULT 0 AFTER processed_items");
+        }
+    }
+
     /**
      * Register admin menu pages
      *
@@ -347,9 +366,14 @@ class ASAE_Taxonomy_Organizer {
     }
     
     /**
-     * Render the main Organizer admin page
+     * Render the main Organizer admin page.
+     * Also triggers stall detection for stuck batches.
      */
     public function render_admin_page() {
+        // Detect and requeue any stalled batch jobs
+        $batch_manager = new ASAE_TO_Batch_Manager();
+        $batch_manager->detect_and_requeue_stalled();
+
         $admin = new ASAE_TO_Admin();
         $admin->render();
     }
@@ -558,6 +582,53 @@ class ASAE_Taxonomy_Organizer {
     }
     
     /**
+     * AJAX: Process a single preview chunk (chunked preview mode)
+     */
+    public function ajax_process_preview_chunk() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $processor = new ASAE_TO_Processor();
+        $result = $processor->process_preview_chunk($_POST);
+
+        wp_send_json($result);
+    }
+
+    /**
+     * AJAX: Get cost estimate before processing
+     */
+    public function ajax_get_cost_estimate() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $processor = new ASAE_TO_Processor();
+        $estimate = $processor->get_cost_estimate($_POST);
+
+        wp_send_json_success($estimate);
+    }
+
+    /**
+     * AJAX: Reset monthly usage counter
+     */
+    public function ajax_reset_usage() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        ASAE_TO_AI_Analyzer::reset_monthly_usage();
+
+        wp_send_json_success(array('message' => __('Usage counter reset.', 'asae-taxonomy-organizer')));
+    }
+
+    /**
      * AJAX: Save OpenAI settings
      * 
      * Saves the API key and model selection to WordPress options.
@@ -585,10 +656,16 @@ class ASAE_Taxonomy_Organizer {
             $model = 'gpt-4o-mini';
         }
         
+        // Cost control settings
+        $monthly_limit = isset($_POST['monthly_api_limit']) ? max(0, intval($_POST['monthly_api_limit'])) : 0;
+        $api_delay     = isset($_POST['api_delay']) ? max(0, min(5000, intval($_POST['api_delay']))) : 200;
+
         // Save settings
         update_option('asae_to_openai_api_key', $api_key);
         update_option('asae_to_openai_model', $model);
         update_option('asae_to_use_ai', $use_ai);
+        update_option('asae_to_monthly_api_call_limit', $monthly_limit);
+        update_option('asae_to_api_call_delay_ms', $api_delay);
         
         wp_send_json(array(
             'success' => true,

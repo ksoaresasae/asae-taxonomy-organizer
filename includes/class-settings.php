@@ -50,6 +50,9 @@ class ASAE_TO_Settings {
         $api_key = get_option('asae_to_openai_api_key', '');
         $selected_model = get_option('asae_to_openai_model', 'gpt-4o-mini');
         $use_ai = get_option('asae_to_use_ai', 'no');
+        $monthly_limit = get_option('asae_to_monthly_api_call_limit', 0);
+        $api_delay = get_option('asae_to_api_call_delay_ms', 200);
+        $usage = ASAE_TO_AI_Analyzer::get_monthly_usage();
         ?>
         <div class="wrap asae-to-wrap">
             <h1><?php _e('OpenAI Settings', 'asae-taxonomy-organizer'); ?></h1>
@@ -78,7 +81,7 @@ class ASAE_TO_Settings {
                                                    class="regular-text" 
                                                    value="<?php echo esc_attr($api_key); ?>"
                                                    autocomplete="off">
-                                            <button type="button" id="toggle-api-key" class="button">
+                                            <button type="button" id="toggle-api-key" class="button" aria-label="<?php esc_attr_e('Show API key', 'asae-taxonomy-organizer'); ?>">
                                                 <span class="dashicons dashicons-visibility"></span>
                                                 <?php _e('Show', 'asae-taxonomy-organizer'); ?>
                                             </button>
@@ -154,8 +157,71 @@ class ASAE_TO_Settings {
                             </tr>
                         </table>
                     </div>
+
+                    <div class="asae-to-card">
+                        <h2><?php _e('Cost Controls', 'asae-taxonomy-organizer'); ?></h2>
+                        <p class="description">
+                            <?php _e('Manage API spending with monthly limits and rate controls.', 'asae-taxonomy-organizer'); ?>
+                        </p>
+
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="monthly_api_limit"><?php _e('Monthly API Call Limit', 'asae-taxonomy-organizer'); ?></label>
+                                </th>
+                                <td>
+                                    <input type="number" name="monthly_api_limit" id="monthly_api_limit"
+                                           class="small-text" min="0" step="1"
+                                           value="<?php echo esc_attr($monthly_limit); ?>">
+                                    <p class="description">
+                                        <?php _e('Maximum API calls per month. Set to 0 for unlimited. When exceeded, the plugin falls back to keyword matching.', 'asae-taxonomy-organizer'); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">
+                                    <label for="api_delay"><?php _e('Delay Between API Calls', 'asae-taxonomy-organizer'); ?></label>
+                                </th>
+                                <td>
+                                    <input type="number" name="api_delay" id="api_delay"
+                                           class="small-text" min="0" max="5000" step="50"
+                                           value="<?php echo esc_attr($api_delay); ?>">
+                                    <span><?php _e('milliseconds', 'asae-taxonomy-organizer'); ?></span>
+                                    <p class="description">
+                                        <?php _e('Pause between each API call to avoid rate limits. Recommended: 200ms.', 'asae-taxonomy-organizer'); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">
+                                    <?php _e('Usage This Month', 'asae-taxonomy-organizer'); ?>
+                                </th>
+                                <td>
+                                    <div class="asae-to-usage-display">
+                                        <strong id="usage-count"><?php echo intval($usage['used']); ?></strong>
+                                        <?php if ($usage['limit'] > 0): ?>
+                                            / <strong><?php echo intval($usage['limit']); ?></strong>
+                                        <?php endif; ?>
+                                        <span><?php _e('API calls', 'asae-taxonomy-organizer'); ?></span>
+                                        <?php if ($usage['limit'] > 0): ?>
+                                            <?php
+                                            $pct = round(($usage['used'] / $usage['limit']) * 100);
+                                            $bar_class = $pct > 90 ? 'usage-danger' : ($pct > 70 ? 'usage-warning' : 'usage-ok');
+                                            ?>
+                                            <div class="usage-bar" role="progressbar" aria-valuenow="<?php echo intval($usage['used']); ?>" aria-valuemin="0" aria-valuemax="<?php echo intval($usage['limit']); ?>" aria-label="<?php esc_attr_e('Monthly API usage', 'asae-taxonomy-organizer'); ?>">
+                                                <div class="usage-bar-fill <?php echo $bar_class; ?>" style="width: <?php echo min(100, $pct); ?>%"></div>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <button type="button" id="reset-usage-btn" class="button button-small" style="margin-top: 8px;">
+                                        <?php _e('Reset Counter', 'asae-taxonomy-organizer'); ?>
+                                    </button>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
                 </div>
-                
+
                 <div class="asae-to-sidebar">
                     <div class="asae-to-card">
                         <h3><?php _e('About OpenAI Integration', 'asae-taxonomy-organizer'); ?></h3>

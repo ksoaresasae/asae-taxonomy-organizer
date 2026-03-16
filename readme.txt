@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.0.4
+Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,18 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.1.0 =
+* Added monthly API call budget with automatic fallback to keyword matching when exceeded
+* Added pre-processing cost estimate confirmation dialog
+* Added configurable delay between API calls (rate limiting)
+* Added HTTP 429 backoff handling with automatic retry
+* Added per-item progress saving for crash resilience
+* Added stall detection: stuck batches auto-requeue after 5 minutes
+* Added chunked AJAX preview processing with progress bar
+* Added per-batch API call tracking
+* Added usage display with progress bar on Settings page
+* Added reset usage counter button
 
 = 0.0.4 =
 * Moved admin menu under shared "ASAE" top-level menu (standard ASAE submenu pattern)
@@ -72,6 +84,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.1.0 =
+Adds resilience features (crash recovery, stall detection) and cost controls (monthly budget, rate limiting, pre-processing estimate).
 
 = 0.0.4 =
 Admin menu now appears under the shared ASAE menu. If ASAE Explore is not active, a fallback ASAE menu is created.
