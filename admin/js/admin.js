@@ -229,8 +229,8 @@
                             msg += 'Remaining budget: ' + d.remaining_calls + ' calls this month.\n';
                         }
                         if (d.budget_exceeded) {
-                            msg += '\nWARNING: This would exceed your monthly API call limit.\n' +
-                                   'Items beyond the limit will use keyword matching instead.';
+                            msg += '\nNOTE: This would exceed your monthly API call limit.\n' +
+                                   'Processing will pause when the limit is reached and retry automatically.';
                         }
                     }
                     msg += '\nContinue?';
@@ -326,10 +326,15 @@
 
                         offset += chunkSize;
 
-                        // Handle rate limiting: pause then retry
-                        if (data.rate_limited) {
-                            $('.progress-text').text(processed + ' of ' + total + ' — paused (rate limited), retrying in 10s...');
-                            setTimeout(processNextChunk, 10000);
+                        // API unavailable (rate limited, budget exceeded, or error) — stop preview
+                        if (data.api_unavailable) {
+                            var reason = data.api_status === 'rate_limited' ? 'rate limited' :
+                                         data.api_status === 'budget_exceeded' ? 'monthly budget reached' : 'API error';
+                            ASAE_TO.finishChunkedPreview(
+                                'API unavailable (' + reason + '). ' + processed + ' of ' + total +
+                                ' items processed so far. Results above are preserved. Please try again later.',
+                                processed
+                            );
                             return;
                         }
 
@@ -949,6 +954,11 @@
                 html += '<strong>' + ASAE_TO.escapeHtml(batch.post_type) + '</strong> &rarr; ' + ASAE_TO.escapeHtml(batch.taxonomy) + '<br>';
                 html += '<span class="batch-progress">' + batch.processed_items + ' / ' + batch.total_items + '</span>';
                 html += '<span class="batch-status status-' + batch.status + '">' + ASAE_TO.capitalize(batch.status) + '</span>';
+                if (batch.status === 'paused' && batch.next_retry_at) {
+                    var reason = batch.pause_reason === 'rate_limited' ? 'Rate limited' :
+                                 batch.pause_reason === 'budget_exceeded' ? 'Budget reached' : 'API error';
+                    html += '<br><span class="batch-paused-info">' + reason + ' — retries at ' + ASAE_TO.formatDateTime(batch.next_retry_at) + '</span>';
+                }
                 html += '</div>';
                 html += '<button class="button button-small cancel-batch" data-batch-id="' + ASAE_TO.escapeHtml(batch.batch_id) + '">Cancel</button>';
                 html += '</div>';
@@ -978,6 +988,12 @@
         formatDate: function(dateStr) {
             if (!dateStr) return '';
             return new Date(dateStr).toLocaleDateString();
+        },
+
+        formatDateTime: function(dateStr) {
+            if (!dateStr) return '';
+            var d = new Date(dateStr.replace(' ', 'T') + 'Z');
+            return d.toLocaleString();
         },
 
         escapeHtml: function(text) {

@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.1.0
+ * Version: 0.2.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.1.0');
+define('ASAE_TO_VERSION', '0.2.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -228,6 +228,8 @@ class ASAE_Taxonomy_Organizer {
             date_to date DEFAULT NULL,
             exclude_taxonomy varchar(100) DEFAULT NULL,
             confidence_threshold int(11) NOT NULL DEFAULT 0,
+            next_retry_at datetime DEFAULT NULL,
+            pause_reason varchar(50) DEFAULT NULL,
             created_at datetime NOT NULL,
             updated_at datetime NOT NULL,
             PRIMARY KEY (id),
@@ -269,14 +271,23 @@ class ASAE_Taxonomy_Organizer {
     }
 
     /**
-     * Add api_calls_made column if upgrading from a version that lacks it.
+     * Add columns if upgrading from a version that lacks them.
      */
     private function maybe_migrate_batch_table() {
         global $wpdb;
         $table_name = $wpdb->prefix . 'asae_to_batches';
         $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name", 0);
-        if (!empty($columns) && !in_array('api_calls_made', $columns, true)) {
+        if (empty($columns)) {
+            return;
+        }
+        if (!in_array('api_calls_made', $columns, true)) {
             $wpdb->query("ALTER TABLE $table_name ADD COLUMN api_calls_made int(11) NOT NULL DEFAULT 0 AFTER processed_items");
+        }
+        if (!in_array('next_retry_at', $columns, true)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN next_retry_at datetime DEFAULT NULL AFTER confidence_threshold");
+        }
+        if (!in_array('pause_reason', $columns, true)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN pause_reason varchar(50) DEFAULT NULL AFTER next_retry_at");
         }
     }
 
@@ -659,6 +670,7 @@ class ASAE_Taxonomy_Organizer {
         // Cost control settings
         $monthly_limit = isset($_POST['monthly_api_limit']) ? max(0, intval($_POST['monthly_api_limit'])) : 0;
         $api_delay     = isset($_POST['api_delay']) ? max(0, min(5000, intval($_POST['api_delay']))) : 200;
+        $retry_delay   = isset($_POST['retry_delay']) ? max(1, min(1440, intval($_POST['retry_delay']))) : 60;
 
         // Save settings
         update_option('asae_to_openai_api_key', $api_key);
@@ -666,6 +678,7 @@ class ASAE_Taxonomy_Organizer {
         update_option('asae_to_use_ai', $use_ai);
         update_option('asae_to_monthly_api_call_limit', $monthly_limit);
         update_option('asae_to_api_call_delay_ms', $api_delay);
+        update_option('asae_to_api_retry_delay_minutes', $retry_delay);
         
         wp_send_json(array(
             'success' => true,

@@ -86,7 +86,34 @@ class ASAE_TO_Batch_Manager {
     }
 
     /**
-     * Get all active (pending / processing) batches.
+     * Mark a batch as paused (waiting for API availability).
+     *
+     * @param string $batch_id
+     * @param int    $retry_seconds Seconds until next retry
+     * @param string $reason        Why paused (rate_limited, budget_exceeded, error)
+     */
+    public function pause_batch($batch_id, $retry_seconds, $reason = '') {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'asae_to_batches';
+
+        $next_retry = gmdate('Y-m-d H:i:s', time() + $retry_seconds);
+
+        $wpdb->update(
+            $table_name,
+            array(
+                'status'        => 'paused',
+                'next_retry_at' => $next_retry,
+                'pause_reason'  => $reason,
+                'updated_at'    => current_time('mysql'),
+            ),
+            array('batch_id' => $batch_id),
+            array('%s', '%s', '%s', '%s'),
+            array('%s')
+        );
+    }
+
+    /**
+     * Get all active (pending / processing / paused) batches.
      *
      * @return array
      */
@@ -95,7 +122,7 @@ class ASAE_TO_Batch_Manager {
         $table_name = $wpdb->prefix . 'asae_to_batches';
 
         return $wpdb->get_results(
-            "SELECT * FROM $table_name WHERE status IN ('pending', 'processing') ORDER BY created_at DESC"
+            "SELECT * FROM $table_name WHERE status IN ('pending', 'processing', 'paused') ORDER BY created_at DESC"
         );
     }
 
@@ -158,7 +185,7 @@ class ASAE_TO_Batch_Manager {
         }
 
         $wpdb->query($wpdb->prepare(
-            "UPDATE $table_name SET status = %s, updated_at = %s WHERE status IN ('pending', 'processing')",
+            "UPDATE $table_name SET status = %s, updated_at = %s WHERE status IN ('pending', 'processing', 'paused')",
             'cancelled',
             current_time('mysql')
         ));
@@ -175,7 +202,7 @@ class ASAE_TO_Batch_Manager {
 
     /**
      * Find batches stuck in 'processing' past the stall timeout and requeue
-     * them.  Should be called on admin page load or via a lightweight cron.
+     * them.  'paused' batches are excluded — they are intentionally waiting.
      *
      * @return int Number of batches requeued
      */
@@ -185,6 +212,7 @@ class ASAE_TO_Batch_Manager {
 
         $cutoff = gmdate('Y-m-d H:i:s', time() - self::STALL_TIMEOUT);
 
+        // Only detect stalls in 'processing' — 'paused' batches are waiting intentionally
         $stalled = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM $table_name WHERE status = 'processing' AND updated_at < %s",
             $cutoff

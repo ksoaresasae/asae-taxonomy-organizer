@@ -52,6 +52,7 @@ class ASAE_TO_Settings {
         $use_ai = get_option('asae_to_use_ai', 'no');
         $monthly_limit = get_option('asae_to_monthly_api_call_limit', 0);
         $api_delay = get_option('asae_to_api_call_delay_ms', 200);
+        $retry_delay = get_option('asae_to_api_retry_delay_minutes', 60);
         $usage = ASAE_TO_AI_Analyzer::get_monthly_usage();
         ?>
         <div class="wrap asae-to-wrap">
@@ -189,6 +190,20 @@ class ASAE_TO_Settings {
                                     <span><?php _e('milliseconds', 'asae-taxonomy-organizer'); ?></span>
                                     <p class="description">
                                         <?php _e('Pause between each API call to avoid rate limits. Recommended: 200ms.', 'asae-taxonomy-organizer'); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">
+                                    <label for="retry_delay"><?php _e('Retry Delay When Blocked', 'asae-taxonomy-organizer'); ?></label>
+                                </th>
+                                <td>
+                                    <input type="number" name="retry_delay" id="retry_delay"
+                                           class="small-text" min="1" max="1440" step="1"
+                                           value="<?php echo esc_attr($retry_delay); ?>">
+                                    <span><?php _e('minutes', 'asae-taxonomy-organizer'); ?></span>
+                                    <p class="description">
+                                        <?php _e('When the API refuses requests (rate limit, budget, or error), batch processing pauses for this duration before retrying. Default: 60 minutes.', 'asae-taxonomy-organizer'); ?>
                                     </p>
                                 </td>
                             </tr>

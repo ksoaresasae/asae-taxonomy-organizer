@@ -489,6 +489,18 @@
     color: #721c24;
 }
 
+.batch-status.status-paused {
+    background: #e2e3f1;
+    color: #3c3c8a;
+}
+
+.batch-paused-info {
+    font-size: 11px;
+    color: #666;
+    font-style: italic;
+    margin-top: 4px;
+}
+
 .no-batches {
     color: #666;
     font-style: italic;

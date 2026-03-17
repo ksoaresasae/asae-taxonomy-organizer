@@ -129,16 +129,17 @@ class ASAE_TO_Processor {
                 $analysis = null;
             }
 
-            // If rate-limited, stop this chunk and tell JS to pause
-            if ($ai_analyzer->last_status === 'rate_limited') {
+            // API refused (rate limited, budget exceeded, or error) — stop chunk
+            if (in_array($ai_analyzer->last_status, array('rate_limited', 'budget_exceeded', 'error'), true)) {
                 return array(
                     'success' => true,
                     'data'    => array(
-                        'results'      => $results,
-                        'total'        => $total,
-                        'has_more'     => true,
-                        'rate_limited' => true,
-                        'all_terms'    => ($offset === 0) ? $this->simplify_terms($terms) : array(),
+                        'results'        => $results,
+                        'total'          => $total,
+                        'has_more'       => true,
+                        'api_unavailable' => true,
+                        'api_status'     => $ai_analyzer->last_status,
+                        'all_terms'      => ($offset === 0) ? $this->simplify_terms($terms) : array(),
                     ),
                 );
             }
@@ -293,7 +294,7 @@ class ASAE_TO_Processor {
         set_transient($lock_key, true, 300); // 5-minute expiry
 
         $batch = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table_name WHERE batch_id = %s AND status IN ('pending', 'processing')",
+            "SELECT * FROM $table_name WHERE batch_id = %s AND status IN ('pending', 'processing', 'paused')",
             $batch_id
         ));
 
@@ -357,13 +358,18 @@ class ASAE_TO_Processor {
                 $analysis = null;
             }
 
-            // Rate-limited by OpenAI: save progress so far, reschedule with backoff
-            if ($ai_analyzer->last_status === 'rate_limited') {
+            // API refused (rate limited, budget exceeded, or error): pause batch
+            if (in_array($ai_analyzer->last_status, array('rate_limited', 'budget_exceeded', 'error'), true)) {
                 $this->save_batch_progress($batch_id, $current_processed + $processed, $current_api_calls + $api_calls_made);
-                // Cancel the pre-scheduled event and reschedule with longer delay
+                // Cancel the pre-scheduled event and reschedule with configurable retry delay
                 $batch_manager->cancel_scheduled($batch_id);
-                $batch_manager->schedule_batch($batch_id, 60); // 60-second backoff
+                $retry_minutes = max(1, intval(get_option('asae_to_api_retry_delay_minutes', 60)));
+                $retry_seconds = $retry_minutes * 60;
+                $batch_manager->schedule_batch($batch_id, $retry_seconds);
+                // Mark batch as paused with next retry time
+                $batch_manager->pause_batch($batch_id, $retry_seconds, $ai_analyzer->last_status);
                 delete_transient($lock_key);
+                error_log('ASAE Taxonomy Organizer: Batch ' . $batch_id . ' paused (' . $ai_analyzer->last_status . '), retry in ' . $retry_minutes . ' minutes');
                 return true;
             }
 

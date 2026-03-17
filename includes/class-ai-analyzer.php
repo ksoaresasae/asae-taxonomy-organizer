@@ -229,7 +229,11 @@ class ASAE_TO_AI_Analyzer {
     }
 
     /**
-     * Decide between AI and keyword matching, with budget guard.
+     * Decide between AI and keyword matching.
+     *
+     * When AI is enabled, keyword matching is NEVER used as a fallback.
+     * Any API refusal (budget, rate limit, error) returns null so the
+     * caller can pause and retry later.
      *
      * @param array $content
      * @param array $terms
@@ -241,30 +245,28 @@ class ASAE_TO_AI_Analyzer {
         $use_ai  = get_option('asae_to_use_ai', 'no');
         $api_key = get_option('asae_to_openai_api_key', '');
 
-        if ($use_ai === 'yes' && !empty($api_key)) {
-            // Budget gate
-            if (!self::check_budget()) {
-                $this->last_status = 'budget_exceeded';
-                error_log('ASAE Taxonomy Organizer: Monthly API call budget exceeded, using keyword matching');
-                return $this->keyword_matching_with_confidence($content, $terms);
-            }
-
-            $model  = get_option('asae_to_openai_model', 'gpt-4o-mini');
-            $result = $this->call_openai_api_with_confidence($content, $terms, $api_key, $model);
-
-            if ($result) {
-                return $result;
-            }
-
-            // If rate-limited, signal caller to retry later (don't fall back)
-            if ($this->last_status === 'rate_limited') {
-                return null;
-            }
-
-            error_log('ASAE Taxonomy Organizer: AI analysis failed, falling back to keyword matching');
+        // Keyword matching only when user explicitly chose it
+        if ($use_ai !== 'yes' || empty($api_key)) {
+            return $this->keyword_matching_with_confidence($content, $terms);
         }
 
-        return $this->keyword_matching_with_confidence($content, $terms);
+        // Budget gate — do not fall back, signal caller to pause
+        if (!self::check_budget()) {
+            $this->last_status = 'budget_exceeded';
+            error_log('ASAE Taxonomy Organizer: Monthly API call budget exceeded — pausing for retry');
+            return null;
+        }
+
+        $model  = get_option('asae_to_openai_model', 'gpt-4o-mini');
+        $result = $this->call_openai_api_with_confidence($content, $terms, $api_key, $model);
+
+        if ($result) {
+            return $result;
+        }
+
+        // last_status is already set by call_openai_api_with_confidence
+        // ('rate_limited' or 'error') — caller should pause and retry
+        return null;
     }
 
     /**

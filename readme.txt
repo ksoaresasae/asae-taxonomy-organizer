@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,15 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.2.0 =
+* Keyword matching is now an explicit user choice, never an automatic fallback when AI is enabled
+* Batch processing pauses and retries automatically when the API is unavailable (rate limit, budget, or error)
+* Added configurable retry delay setting (1–1440 minutes, default 60)
+* Added "paused" batch status with next retry time display
+* Paused batches are excluded from stall detection
+* Preview mode stops cleanly on API refusal instead of degrading to keywords
+* New database columns: next_retry_at, pause_reason
 
 = 0.1.0 =
 * Added monthly API call budget with automatic fallback to keyword matching when exceeded
@@ -84,6 +93,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.2.0 =
+Keyword matching is now explicit only. Batches pause and retry automatically when the AI API is unavailable.
 
 = 0.1.0 =
 Adds resilience features (crash recovery, stall detection) and cost controls (monthly budget, rate limiting, pre-processing estimate).
