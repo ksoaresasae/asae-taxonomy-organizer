@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,15 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.2.1 =
+* Version badge now displays next to the plugin title
+* Categorization now replaces existing terms instead of appending (one category per post)
+* Removed Active Batches and How It Works sidebar blocks for cleaner UI
+* Added inline progress tracking panel near Analyze Content button
+* Added resume banner for interrupted batch detection on page load
+* Added AJAX polling for real-time batch progress updates
+* Added retry_delay to settings save
 
 = 0.2.0 =
 * Keyword matching is now an explicit user choice, never an automatic fallback when AI is enabled
@@ -93,6 +102,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.2.1 =
+Cleaner UI with inline progress tracking and one-category-per-post enforcement.
 
 = 0.2.0 =
 Keyword matching is now explicit only. Batches pause and retry automatically when the AI API is unavailable.

@@ -113,6 +113,21 @@ class ASAE_TO_Batch_Manager {
     }
 
     /**
+     * Get the most recent batch that is still running (pending/processing/paused).
+     * Used on page load to detect an interrupted batch for resume.
+     *
+     * @return object|null
+     */
+    public function get_running_batch() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'asae_to_batches';
+
+        return $wpdb->get_row(
+            "SELECT * FROM $table_name WHERE status IN ('pending', 'processing', 'paused') ORDER BY id DESC LIMIT 1"
+        );
+    }
+
+    /**
      * Get all active (pending / processing / paused) batches.
      *
      * @return array

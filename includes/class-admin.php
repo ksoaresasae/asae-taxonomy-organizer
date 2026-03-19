@@ -36,8 +36,6 @@ class ASAE_TO_Admin {
         // Gather data needed for the page
         $post_types = $this->get_post_types();
         $all_taxonomies = $this->get_all_taxonomies();
-        $batch_manager = new ASAE_TO_Batch_Manager();
-        $active_batches = $batch_manager->get_active_batches();
         
         // Check if AI is configured and enabled
         $use_ai = get_option('asae_to_use_ai', 'no');
@@ -45,7 +43,9 @@ class ASAE_TO_Admin {
         $ai_available = ($use_ai === 'yes' && !empty($api_key));
         ?>
         <div class="wrap asae-to-wrap">
-            <h1><?php _e('ASAE Taxonomy Organizer', 'asae-taxonomy-organizer'); ?></h1>
+            <h1><?php _e('ASAE Taxonomy Organizer', 'asae-taxonomy-organizer'); ?>
+                <span class="asae-to-version">v<?php echo esc_html(ASAE_TO_VERSION); ?></span>
+            </h1>
             
             <div class="asae-to-container">
                 <div class="asae-to-main">
@@ -63,6 +63,26 @@ class ASAE_TO_Admin {
                         <?php endif; ?>
                     </div>
                     
+                    <!-- Resume Banner (shown when a running batch is detected on page load) -->
+                    <?php
+                    $batch_manager = new ASAE_TO_Batch_Manager();
+                    $running_batch = $batch_manager->get_running_batch();
+                    ?>
+                    <div id="asae-to-resume-banner" class="asae-to-card asae-to-resume-banner" style="display: none;" role="alert">
+                        <p id="asae-to-resume-text">
+                            <strong><?php _e('A running batch was found.', 'asae-taxonomy-organizer'); ?></strong>
+                            <span id="asae-to-resume-detail"></span>
+                        </p>
+                        <div class="asae-to-resume-actions">
+                            <button type="button" id="asae-to-resume-btn" class="button button-primary">
+                                <?php _e('Resume', 'asae-taxonomy-organizer'); ?>
+                            </button>
+                            <button type="button" id="asae-to-cancel-running-btn" class="button">
+                                <?php _e('Cancel Job', 'asae-taxonomy-organizer'); ?>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Main Configuration Card -->
                     <div class="asae-to-card">
                         <h2><?php _e('Content Categorization', 'asae-taxonomy-organizer'); ?></h2>
@@ -257,7 +277,34 @@ class ASAE_TO_Admin {
                             </p>
                         </form>
                     </div>
-                    
+
+                    <!-- Inline Progress Panel (shown during batch/processing runs) -->
+                    <div class="asae-to-card" id="asae-to-progress-panel" style="display: none;" aria-live="polite">
+                        <h2 id="asae-to-progress-heading"><?php _e('Processing', 'asae-taxonomy-organizer'); ?></h2>
+                        <div class="asae-to-status-line">
+                            <strong><?php _e('Status:', 'asae-taxonomy-organizer'); ?></strong>
+                            <span id="asae-to-phase-label"><?php _e('Starting…', 'asae-taxonomy-organizer'); ?></span>
+                        </div>
+                        <div class="asae-to-progress-section">
+                            <p class="asae-to-progress-label">
+                                <span id="asae-to-processed-count">0</span> / <span id="asae-to-total-count">0</span>
+                                <?php _e('items processed', 'asae-taxonomy-organizer'); ?>
+                            </p>
+                            <div class="asae-to-progress-bar-wrap" role="progressbar"
+                                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+                                 aria-label="<?php esc_attr_e('Processing progress', 'asae-taxonomy-organizer'); ?>"
+                                 id="asae-to-progress-bar-wrap">
+                                <div class="asae-to-progress-bar" id="asae-to-progress-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <p id="asae-to-progress-complete" style="display: none;" class="asae-to-complete-notice"></p>
+                        <p>
+                            <button type="button" id="asae-to-cancel-batch-btn" class="button">
+                                <?php _e('Cancel', 'asae-taxonomy-organizer'); ?>
+                            </button>
+                        </p>
+                    </div>
+
                     <!-- Results Card (shown after processing) -->
                     <div class="asae-to-card" id="results-card" style="display: none;">
                         <div class="asae-to-results-header">
@@ -281,52 +328,6 @@ class ASAE_TO_Admin {
                 
                 <!-- Sidebar -->
                 <div class="asae-to-sidebar">
-                    <!-- Active Batches Panel -->
-                    <div class="asae-to-card">
-                        <h3><?php _e('Active Batches', 'asae-taxonomy-organizer'); ?></h3>
-                        <div id="active-batches">
-                            <?php if (empty($active_batches)): ?>
-                                <p class="no-batches"><?php _e('No active batch processes.', 'asae-taxonomy-organizer'); ?></p>
-                            <?php else: ?>
-                                <?php foreach ($active_batches as $batch): ?>
-                                    <div class="batch-item" data-batch-id="<?php echo esc_attr($batch->batch_id); ?>">
-                                        <div class="batch-info">
-                                            <strong><?php echo esc_html($batch->post_type); ?></strong> 
-                                            &rarr; <?php echo esc_html($batch->taxonomy); ?>
-                                            <br>
-                                            <span class="batch-progress">
-                                                <?php echo intval($batch->processed_items); ?> / <?php echo intval($batch->total_items); ?>
-                                            </span>
-                                            <span class="batch-status status-<?php echo esc_attr($batch->status); ?>">
-                                                <?php echo esc_html(ucfirst($batch->status)); ?>
-                                            </span>
-                                        </div>
-                                        <button class="button button-small cancel-batch" 
-                                                data-batch-id="<?php echo esc_attr($batch->batch_id); ?>">
-                                            <?php _e('Cancel', 'asae-taxonomy-organizer'); ?>
-                                        </button>
-                                    </div>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </div>
-                        <button id="cancel-all-batches" class="button" <?php disabled(empty($active_batches)); ?>>
-                            <?php _e('Cancel All Batches', 'asae-taxonomy-organizer'); ?>
-                        </button>
-                    </div>
-                    
-                    <!-- How It Works -->
-                    <div class="asae-to-card">
-                        <h3><?php _e('How It Works', 'asae-taxonomy-organizer'); ?></h3>
-                        <ol>
-                            <li><?php _e('Select a post type to categorize', 'asae-taxonomy-organizer'); ?></li>
-                            <li><?php _e('Choose the taxonomy to use', 'asae-taxonomy-organizer'); ?></li>
-                            <li><?php _e('Set date range and filters', 'asae-taxonomy-organizer'); ?></li>
-                            <li><?php _e('AI/keywords analyze content', 'asae-taxonomy-organizer'); ?></li>
-                            <li><?php _e('Review confidence scores', 'asae-taxonomy-organizer'); ?></li>
-                            <li><?php _e('Approve or correct suggestions', 'asae-taxonomy-organizer'); ?></li>
-                        </ol>
-                    </div>
-                    
                     <!-- Confidence Legend -->
                     <div class="asae-to-card">
                         <h3><?php _e('Confidence Levels', 'asae-taxonomy-organizer'); ?></h3>
@@ -349,7 +350,7 @@ class ASAE_TO_Admin {
             </div>
             
             <div class="asae-to-footer">
-                <p>ASAE Taxonomy Organizer v<?php echo esc_html(ASAE_TO_VERSION); ?></p>
+                <p>ASAE Taxonomy Organizer</p>
             </div>
         </div>
         <?php

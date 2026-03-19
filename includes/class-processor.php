@@ -242,7 +242,7 @@ class ASAE_TO_Processor {
                 if (get_post_status($post_id) !== false) {
                     $term = get_term($term_id, $taxonomy);
                     if (!is_wp_error($term) && $term) {
-                        $result = wp_set_object_terms($post_id, $term_id, $taxonomy, true);
+                        $result = wp_set_object_terms($post_id, $term_id, $taxonomy, false);
                         if (!is_wp_error($result)) {
                             $saved++;
                         } else {
@@ -374,7 +374,7 @@ class ASAE_TO_Processor {
             }
 
             if ($analysis && $analysis['confidence'] >= $confidence_threshold) {
-                wp_set_object_terms($post->ID, $analysis['term']->term_id, $batch->taxonomy, true);
+                wp_set_object_terms($post->ID, $analysis['term']->term_id, $batch->taxonomy, false);
             }
 
             // Track API call if AI was used
@@ -478,7 +478,7 @@ class ASAE_TO_Processor {
 
             if (!$preview_mode && $analysis) {
                 if ($analysis['confidence'] >= $confidence_threshold) {
-                    $set_result = wp_set_object_terms($post->ID, $analysis['term']->term_id, $taxonomy, true);
+                    $set_result = wp_set_object_terms($post->ID, $analysis['term']->term_id, $taxonomy, false);
                     $result['saved']        = !is_wp_error($set_result);
                     $result['needs_review'] = false;
                     $auto_saved++;

@@ -768,6 +768,90 @@
 }
 
 /* =============================================================================
+   Version Badge
+   ============================================================================= */
+
+.asae-to-version {
+    font-size: 12px;
+    font-weight: 400;
+    color: #666;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* =============================================================================
+   Inline Batch Progress Panel
+   ============================================================================= */
+
+#asae-to-progress-panel {
+    border-left: 4px solid #2271b1;
+}
+
+.asae-to-status-line {
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+
+.asae-to-progress-section {
+    margin-bottom: 15px;
+}
+
+.asae-to-progress-label {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #555;
+}
+
+.asae-to-progress-bar-wrap {
+    width: 100%;
+    height: 24px;
+    background: #e5e5e5;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.asae-to-progress-bar {
+    height: 100%;
+    background: #2271b1;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.asae-to-complete-notice {
+    padding: 10px 15px;
+    background: #edfaef;
+    border-left: 4px solid #00a32a;
+    color: #0a5c1a;
+    border-radius: 0 4px 4px 0;
+}
+
+/* =============================================================================
+   Resume Banner
+   ============================================================================= */
+
+.asae-to-resume-banner {
+    border-left: 4px solid #dba617;
+    background: #fff9e5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.asae-to-resume-banner p {
+    margin: 0;
+    flex: 1;
+    min-width: 200px;
+}
+
+.asae-to-resume-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* =============================================================================
    Responsive Adjustments
    ============================================================================= */
 

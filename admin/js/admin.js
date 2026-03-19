@@ -27,9 +27,12 @@
         // Initialisation
         // =====================================================================
 
+        currentBatchId: null,
+        batchPollTimer: null,
+
         init: function() {
             this.bindEvents();
-            this.startBatchPolling();
+            this.initResumeBanner();
             this.initSettingsPage();
         },
 
@@ -42,9 +45,10 @@
             $('#confidence_threshold').on('input', this.updateConfidenceDisplay);
             $('#asae-to-form').on('submit', this.processContent);
 
-            // Batch management
-            $(document).on('click', '.cancel-batch', this.cancelBatch);
-            $('#cancel-all-batches').on('click', this.cancelAllBatches);
+            // Inline batch progress
+            $('#asae-to-cancel-batch-btn').on('click', this.cancelCurrentBatch);
+            $('#asae-to-resume-btn').on('click', this.resumeBatch);
+            $('#asae-to-cancel-running-btn').on('click', this.cancelRunningBatch);
 
             // Approval workflow
             $('#approve-all-btn').on('click', this.approveAll);
@@ -428,24 +432,23 @@
                     nonce: asaeToAdmin.nonce
                 }, formData),
                 success: function(response) {
-                    $('#processing-spinner').removeClass('is-active');
-                    $('#process-btn').prop('disabled', false);
-                    $('#results-card').show();
-
                     if (response.success) {
                         if (response.is_batch) {
-                            $('#results-container').html(
-                                '<div class="processing-message" role="status">' +
-                                '<strong>Batch Processing Started</strong><br>' +
-                                response.message + '<br>' +
-                                'Track progress in the Active Batches panel.</div>'
-                            );
-                            ASAE_TO.refreshBatchStatus();
+                            // Batch started — switch to inline progress polling
+                            ASAE_TO.currentBatchId = response.batch_id;
+                            ASAE_TO.showInlineProgress(response.total_items);
+                            ASAE_TO.startBatchProgressPolling();
                         } else {
+                            $('#processing-spinner').removeClass('is-active');
+                            $('#process-btn').prop('disabled', false);
+                            $('#results-card').show();
                             if (response.all_terms) { ASAE_TO.allTerms = response.all_terms; }
                             ASAE_TO.displayResultsWithApproval(response);
                         }
                     } else {
+                        $('#processing-spinner').removeClass('is-active');
+                        $('#process-btn').prop('disabled', false);
+                        $('#results-card').show();
                         $('#results-container').html('<div class="error-message" role="alert">' +
                             ASAE_TO.escapeHtml(response.message) + '</div>');
                     }
@@ -455,6 +458,157 @@
                     $('#process-btn').prop('disabled', false);
                     $('#results-card').show();
                     $('#results-container').html('<div class="error-message" role="alert">An error occurred while processing content.</div>');
+                }
+            });
+        },
+
+        // =====================================================================
+        // Inline batch progress (Content Ingestor pattern)
+        // =====================================================================
+
+        initResumeBanner: function() {
+            if (asaeToAdmin.runningBatchId) {
+                var $banner = $('#asae-to-resume-banner');
+                $('#asae-to-resume-detail').text(
+                    ' ' + asaeToAdmin.runningBatchProcessed + ' of ' +
+                    asaeToAdmin.runningBatchTotal + ' items processed so far.'
+                );
+                $banner.show();
+            }
+        },
+
+        resumeBatch: function() {
+            $('#asae-to-resume-banner').hide();
+            ASAE_TO.currentBatchId = asaeToAdmin.runningBatchId;
+            ASAE_TO.showInlineProgress(asaeToAdmin.runningBatchTotal);
+            $('#asae-to-processed-count').text(asaeToAdmin.runningBatchProcessed);
+            var pct = asaeToAdmin.runningBatchTotal > 0
+                ? Math.round((asaeToAdmin.runningBatchProcessed / asaeToAdmin.runningBatchTotal) * 100) : 0;
+            ASAE_TO.setProgressBar(pct);
+            $('#asae-to-phase-label').text('Processing…');
+            ASAE_TO.startBatchProgressPolling();
+        },
+
+        cancelRunningBatch: function() {
+            var batchId = asaeToAdmin.runningBatchId;
+            $('#asae-to-cancel-running-btn').prop('disabled', true).text('Cancelling…');
+            $.ajax({
+                url: asaeToAdmin.ajaxUrl,
+                type: 'POST',
+                data: { action: 'asae_to_cancel_batch', nonce: asaeToAdmin.nonce, batch_id: batchId },
+                success: function(response) {
+                    $('#asae-to-resume-banner').hide();
+                },
+                complete: function() {
+                    $('#asae-to-cancel-running-btn').prop('disabled', false).text('Cancel Job');
+                }
+            });
+        },
+
+        showInlineProgress: function(totalItems) {
+            $('#processing-spinner').removeClass('is-active');
+            $('#process-btn').prop('disabled', true);
+            $('#asae-to-progress-panel').show();
+            $('#asae-to-total-count').text(totalItems);
+            $('#asae-to-processed-count').text('0');
+            $('#asae-to-phase-label').text('Processing…');
+            $('#asae-to-progress-complete').hide();
+            $('#asae-to-cancel-batch-btn').show().prop('disabled', false);
+            ASAE_TO.setProgressBar(0);
+        },
+
+        setProgressBar: function(pct) {
+            pct = Math.min(100, Math.max(0, pct));
+            $('#asae-to-progress-bar').css('width', pct + '%');
+            $('#asae-to-progress-bar-wrap').attr('aria-valuenow', pct);
+        },
+
+        startBatchProgressPolling: function() {
+            if (ASAE_TO.batchPollTimer) {
+                clearTimeout(ASAE_TO.batchPollTimer);
+            }
+            ASAE_TO.pollBatchProgress();
+        },
+
+        pollBatchProgress: function() {
+            if (!ASAE_TO.currentBatchId) { return; }
+
+            $.ajax({
+                url: asaeToAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'asae_to_get_batch_progress',
+                    nonce: asaeToAdmin.nonce,
+                    batch_id: ASAE_TO.currentBatchId
+                },
+                success: function(response) {
+                    if (!response.success) {
+                        ASAE_TO.finishBatchProgress('Error: batch not found.');
+                        return;
+                    }
+
+                    var d = response.data;
+                    $('#asae-to-processed-count').text(d.processed_items);
+                    $('#asae-to-total-count').text(d.total_items);
+
+                    var pct = d.total_items > 0
+                        ? Math.round((d.processed_items / d.total_items) * 100) : 0;
+                    ASAE_TO.setProgressBar(pct);
+
+                    if (d.status === 'paused') {
+                        var reason = d.pause_reason === 'rate_limited' ? 'rate limited' :
+                                     d.pause_reason === 'budget_exceeded' ? 'budget reached' : 'API error';
+                        var retryText = d.next_retry_at
+                            ? ' Retrying at ' + ASAE_TO.formatDateTime(d.next_retry_at) + '.'
+                            : '';
+                        $('#asae-to-phase-label').text('Paused (' + reason + ').' + retryText);
+                    } else if (d.status === 'processing' || d.status === 'pending') {
+                        $('#asae-to-phase-label').text('Processing… ' + d.processed_items + ' of ' + d.total_items);
+                    }
+
+                    if (d.is_complete) {
+                        var msg = d.status === 'cancelled' ? 'Batch cancelled.' :
+                                  'Complete! ' + d.processed_items + ' items processed.';
+                        ASAE_TO.finishBatchProgress(msg);
+                    } else {
+                        // Keep polling — 2s normal, 30s if paused
+                        var delay = d.status === 'paused' ? 30000 : 2000;
+                        ASAE_TO.batchPollTimer = setTimeout(ASAE_TO.pollBatchProgress, delay);
+                    }
+                },
+                error: function() {
+                    // Network error — retry after 5s
+                    ASAE_TO.batchPollTimer = setTimeout(ASAE_TO.pollBatchProgress, 5000);
+                }
+            });
+        },
+
+        finishBatchProgress: function(message) {
+            ASAE_TO.currentBatchId = null;
+            if (ASAE_TO.batchPollTimer) {
+                clearTimeout(ASAE_TO.batchPollTimer);
+                ASAE_TO.batchPollTimer = null;
+            }
+            ASAE_TO.setProgressBar(100);
+            $('#asae-to-phase-label').text('Done');
+            $('#asae-to-progress-complete').text(message).show();
+            $('#asae-to-cancel-batch-btn').hide();
+            $('#process-btn').prop('disabled', false);
+        },
+
+        cancelCurrentBatch: function() {
+            if (!ASAE_TO.currentBatchId) { return; }
+            var $btn = $('#asae-to-cancel-batch-btn');
+            $btn.prop('disabled', true).text('Cancelling…');
+            $.ajax({
+                url: asaeToAdmin.ajaxUrl,
+                type: 'POST',
+                data: { action: 'asae_to_cancel_batch', nonce: asaeToAdmin.nonce, batch_id: ASAE_TO.currentBatchId },
+                success: function() {
+                    ASAE_TO.finishBatchProgress('Batch cancelled.');
+                },
+                error: function() {
+                    $btn.prop('disabled', false).text('Cancel');
                 }
             });
         },
@@ -840,7 +994,8 @@
                     model: $('#openai_model').val(),
                     use_ai: $('#use_ai').is(':checked') ? 'yes' : 'no',
                     monthly_api_limit: $('#monthly_api_limit').val(),
-                    api_delay: $('#api_delay').val()
+                    api_delay: $('#api_delay').val(),
+                    retry_delay: $('#retry_delay').val()
                 },
                 success: function(response) {
                     $btn.prop('disabled', false);
@@ -882,103 +1037,6 @@
                     }
                 }
             });
-        },
-
-        // =====================================================================
-        // Batch status panel
-        // =====================================================================
-
-        cancelBatch: function(e) {
-            e.preventDefault();
-            var batchId = $(this).data('batch-id');
-            var $batchItem = $(this).closest('.batch-item');
-            if (!confirm('Cancel this batch?')) { return; }
-
-            $.ajax({
-                url: asaeToAdmin.ajaxUrl,
-                type: 'POST',
-                data: { action: 'asae_to_cancel_batch', nonce: asaeToAdmin.nonce, batch_id: batchId },
-                success: function(response) {
-                    if (response.success) {
-                        $batchItem.fadeOut(function() { $(this).remove(); ASAE_TO.checkEmptyBatches(); });
-                    } else {
-                        alert(response.message || 'Failed to cancel batch.');
-                    }
-                },
-                error: function() { alert('An error occurred while cancelling the batch.'); }
-            });
-        },
-
-        cancelAllBatches: function(e) {
-            e.preventDefault();
-            if (!confirm('Cancel ALL active batches?')) { return; }
-
-            var batchIds = [];
-            $('.batch-item').each(function() { batchIds.push($(this).data('batch-id')); });
-            if (batchIds.length === 0) { return; }
-
-            $.each(batchIds, function(i, batchId) {
-                $.ajax({
-                    url: asaeToAdmin.ajaxUrl,
-                    type: 'POST',
-                    data: { action: 'asae_to_cancel_batch', nonce: asaeToAdmin.nonce, batch_id: batchId }
-                });
-            });
-
-            $('.batch-item').fadeOut(function() { $(this).remove(); ASAE_TO.checkEmptyBatches(); });
-        },
-
-        refreshBatchStatus: function() {
-            $.ajax({
-                url: asaeToAdmin.ajaxUrl,
-                type: 'POST',
-                data: { action: 'asae_to_get_batch_status', nonce: asaeToAdmin.nonce },
-                success: function(response) {
-                    if (response.success) { ASAE_TO.updateBatchUI(response.data); }
-                }
-            });
-        },
-
-        updateBatchUI: function(batches) {
-            var $container = $('#active-batches');
-            if (!batches || batches.length === 0) {
-                $container.html('<p class="no-batches">No active batch processes.</p>');
-                $('#cancel-all-batches').prop('disabled', true);
-                return;
-            }
-
-            var html = '';
-            $.each(batches, function(i, batch) {
-                html += '<div class="batch-item" data-batch-id="' + ASAE_TO.escapeHtml(batch.batch_id) + '">';
-                html += '<div class="batch-info">';
-                html += '<strong>' + ASAE_TO.escapeHtml(batch.post_type) + '</strong> &rarr; ' + ASAE_TO.escapeHtml(batch.taxonomy) + '<br>';
-                html += '<span class="batch-progress">' + batch.processed_items + ' / ' + batch.total_items + '</span>';
-                html += '<span class="batch-status status-' + batch.status + '">' + ASAE_TO.capitalize(batch.status) + '</span>';
-                if (batch.status === 'paused' && batch.next_retry_at) {
-                    var reason = batch.pause_reason === 'rate_limited' ? 'Rate limited' :
-                                 batch.pause_reason === 'budget_exceeded' ? 'Budget reached' : 'API error';
-                    html += '<br><span class="batch-paused-info">' + reason + ' — retries at ' + ASAE_TO.formatDateTime(batch.next_retry_at) + '</span>';
-                }
-                html += '</div>';
-                html += '<button class="button button-small cancel-batch" data-batch-id="' + ASAE_TO.escapeHtml(batch.batch_id) + '">Cancel</button>';
-                html += '</div>';
-            });
-
-            $container.html(html);
-            $('#cancel-all-batches').prop('disabled', false);
-        },
-
-        checkEmptyBatches: function() {
-            if ($('.batch-item').length === 0) {
-                $('#active-batches').html('<p class="no-batches">No active batch processes.</p>');
-                $('#cancel-all-batches').prop('disabled', true);
-            }
-        },
-
-        startBatchPolling: function() {
-            setInterval(function() {
-                if ($('.batch-item').length > 0) { ASAE_TO.refreshBatchStatus(); }
-            }, 10000);
         },
 
         // =====================================================================

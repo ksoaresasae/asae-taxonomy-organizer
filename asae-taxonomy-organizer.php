@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.2.0
+ * Version: 0.2.1
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.2.0');
+define('ASAE_TO_VERSION', '0.2.1');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -169,6 +169,7 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_save_settings', array($this, 'ajax_save_settings'));
         add_action('wp_ajax_asae_to_test_connection', array($this, 'ajax_test_connection'));
         add_action('wp_ajax_asae_to_reset_usage', array($this, 'ajax_reset_usage'));
+        add_action('wp_ajax_asae_to_get_batch_progress', array($this, 'ajax_get_batch_progress'));
         
         // Plugin lifecycle hooks
         register_activation_hook(__FILE__, array($this, 'activate'));
@@ -368,11 +369,17 @@ class ASAE_Taxonomy_Organizer {
         
         // Pass data to JavaScript
         // This includes AJAX URL, nonce, and current settings for the JS to use
+        $batch_manager = new ASAE_TO_Batch_Manager();
+        $running_batch = $batch_manager->get_running_batch();
+
         wp_localize_script('asae-to-admin', 'asaeToAdmin', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('asae_to_nonce'),
             'version' => ASAE_TO_VERSION,
-            'useAI' => get_option('asae_to_use_ai', 'no')
+            'useAI' => get_option('asae_to_use_ai', 'no'),
+            'runningBatchId' => $running_batch ? $running_batch->batch_id : '',
+            'runningBatchProcessed' => $running_batch ? intval($running_batch->processed_items) : 0,
+            'runningBatchTotal' => $running_batch ? intval($running_batch->total_items) : 0,
         ));
     }
     
@@ -637,6 +644,41 @@ class ASAE_Taxonomy_Organizer {
         ASAE_TO_AI_Analyzer::reset_monthly_usage();
 
         wp_send_json_success(array('message' => __('Usage counter reset.', 'asae-taxonomy-organizer')));
+    }
+
+    /**
+     * AJAX: Get batch progress (polled by JS during batch runs)
+     */
+    public function ajax_get_batch_progress() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $batch_id = isset($_POST['batch_id']) ? sanitize_text_field($_POST['batch_id']) : '';
+
+        if (empty($batch_id)) {
+            wp_send_json_error('Batch ID required');
+        }
+
+        $batch_manager = new ASAE_TO_Batch_Manager();
+        $batch = $batch_manager->get_batch($batch_id);
+
+        if (!$batch) {
+            wp_send_json_error('Batch not found');
+        }
+
+        wp_send_json_success(array(
+            'batch_id'        => $batch->batch_id,
+            'status'          => $batch->status,
+            'processed_items' => intval($batch->processed_items),
+            'total_items'     => intval($batch->total_items),
+            'api_calls_made'  => intval($batch->api_calls_made),
+            'next_retry_at'   => isset($batch->next_retry_at) ? $batch->next_retry_at : null,
+            'pause_reason'    => isset($batch->pause_reason) ? $batch->pause_reason : null,
+            'is_complete'     => in_array($batch->status, array('completed', 'cancelled', 'failed'), true),
+        ));
     }
 
     /**
