@@ -148,6 +148,9 @@ class ASAE_Taxonomy_Organizer {
      * plugin's functionality. Organized by type for easier maintenance.
      */
     private function init_hooks() {
+        // Auto-upgrade DB schema when plugin version changes
+        add_action('admin_init', array($this, 'maybe_upgrade_db'));
+
         // Admin menu (priority 20: runs after ASAE Explore's priority 10)
         add_action('admin_menu', array($this, 'add_admin_menu'), 20);
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
@@ -199,6 +202,18 @@ class ASAE_Taxonomy_Organizer {
         wp_clear_scheduled_hook('asae_to_process_batch');
     }
     
+    /**
+     * Run DB schema updates when the plugin version changes.
+     */
+    public function maybe_upgrade_db() {
+        $installed_version = get_option('asae_to_db_version', '0');
+        if (version_compare($installed_version, ASAE_TO_VERSION, '<')) {
+            $this->create_batch_table();
+            $this->create_feedback_table();
+            update_option('asae_to_db_version', ASAE_TO_VERSION);
+        }
+    }
+
     /**
      * Create the batch processing table
      * 

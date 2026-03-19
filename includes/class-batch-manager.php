@@ -37,7 +37,7 @@ class ASAE_TO_Batch_Manager {
 
         $batch_id = 'batch_' . uniqid();
 
-        $wpdb->insert(
+        $result = $wpdb->insert(
             $table_name,
             array(
                 'batch_id'             => $batch_id,
@@ -57,6 +57,11 @@ class ASAE_TO_Batch_Manager {
             ),
             array('%s', '%s', '%s', '%d', '%d', '%d', '%s', '%d', '%s', '%s', '%s', '%d', '%s', '%s')
         );
+
+        if ($result === false) {
+            error_log('ASAE Taxonomy Organizer: Failed to create batch. DB error: ' . $wpdb->last_error);
+            return false;
+        }
 
         return $batch_id;
     }

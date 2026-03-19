@@ -543,7 +543,8 @@
                 },
                 success: function(response) {
                     if (!response.success) {
-                        ASAE_TO.finishBatchProgress('Error: batch not found.');
+                        var errMsg = response.data || 'batch not found';
+                        ASAE_TO.finishBatchProgress('Error: ' + errMsg);
                         return;
                     }
 

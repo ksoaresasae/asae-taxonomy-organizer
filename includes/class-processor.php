@@ -529,6 +529,11 @@ class ASAE_TO_Processor {
         }
 
         $batch_id = $batch_manager->create_batch($post_type, $taxonomy, $total_items, $ignore_categorized, $date_from, $date_to, $exclude_taxonomy, $confidence_threshold);
+
+        if ($batch_id === false) {
+            return array('success' => false, 'message' => __('Failed to create batch record. Please deactivate and reactivate the plugin to update the database schema.', 'asae-taxonomy-organizer'));
+        }
+
         $batch_manager->schedule_batch($batch_id);
 
         return array(
