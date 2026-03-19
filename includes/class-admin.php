@@ -80,6 +80,9 @@ class ASAE_TO_Admin {
                             <button type="button" id="asae-to-cancel-running-btn" class="button">
                                 <?php _e('Cancel Job', 'asae-taxonomy-organizer'); ?>
                             </button>
+                            <button type="button" id="asae-to-cancel-all-btn" class="button" title="<?php esc_attr_e('Cancel all pending, processing, and paused batches', 'asae-taxonomy-organizer'); ?>">
+                                <?php _e('Cancel All Jobs', 'asae-taxonomy-organizer'); ?>
+                            </button>
                         </div>
                     </div>
 

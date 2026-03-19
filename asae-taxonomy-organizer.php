@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.2.3
+ * Version: 0.2.4
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.2.3');
+define('ASAE_TO_VERSION', '0.2.4');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -159,6 +159,7 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_get_taxonomies', array($this, 'ajax_get_taxonomies'));
         add_action('wp_ajax_asae_to_process_content', array($this, 'ajax_process_content'));
         add_action('wp_ajax_asae_to_cancel_batch', array($this, 'ajax_cancel_batch'));
+        add_action('wp_ajax_asae_to_cancel_all_batches', array($this, 'ajax_cancel_all_batches'));
         add_action('wp_ajax_asae_to_get_batch_status', array($this, 'ajax_get_batch_status'));
         add_action('wp_ajax_asae_to_save_items', array($this, 'ajax_save_items'));
         add_action('wp_ajax_asae_to_get_terms', array($this, 'ajax_get_terms'));
@@ -537,8 +538,24 @@ class ASAE_Taxonomy_Organizer {
     }
     
     /**
+     * AJAX: Cancel all active batches
+     */
+    public function ajax_cancel_all_batches() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $batch_manager = new ASAE_TO_Batch_Manager();
+        $result = $batch_manager->cancel_all_batches();
+
+        wp_send_json($result);
+    }
+
+    /**
      * AJAX: Get current batch status
-     * 
+     *
      * Returns the list of active batch jobs for the status panel.
      */
     public function ajax_get_batch_status() {

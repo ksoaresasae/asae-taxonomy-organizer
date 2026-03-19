@@ -49,6 +49,7 @@
             $('#asae-to-cancel-batch-btn').on('click', this.cancelCurrentBatch);
             $('#asae-to-resume-btn').on('click', this.resumeBatch);
             $('#asae-to-cancel-running-btn').on('click', this.cancelRunningBatch);
+            $('#asae-to-cancel-all-btn').on('click', this.cancelAllBatches);
 
             // Approval workflow
             $('#approve-all-btn').on('click', this.approveAll);
@@ -501,6 +502,28 @@
                 },
                 complete: function() {
                     $('#asae-to-cancel-running-btn').prop('disabled', false).text('Cancel Job');
+                }
+            });
+        },
+
+        cancelAllBatches: function() {
+            if (!confirm('Cancel ALL running, pending, and paused batches? Already-processed items keep their assignments.')) {
+                return;
+            }
+            var $btn = $('#asae-to-cancel-all-btn');
+            $btn.prop('disabled', true).text('Cancelling…');
+            $.ajax({
+                url: asaeToAdmin.ajaxUrl,
+                type: 'POST',
+                data: { action: 'asae_to_cancel_all_batches', nonce: asaeToAdmin.nonce },
+                success: function(response) {
+                    $('#asae-to-resume-banner').hide();
+                    if (ASAE_TO.currentBatchId) {
+                        ASAE_TO.finishBatchProgress('All batches cancelled.');
+                    }
+                },
+                complete: function() {
+                    $btn.prop('disabled', false).text('Cancel All Jobs');
                 }
             });
         },
