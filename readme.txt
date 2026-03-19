@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.2.2
+Stable tag: 0.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,9 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.2.3 =
+* Fixed batch processing hanging: AJAX polling now triggers WP-Cron spawn so batches progress without requiring separate page loads
 
 = 0.2.2 =
 * Fixed batch creation failing silently when DB schema was outdated
@@ -108,6 +111,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.2.3 =
+Fixes batch processing stalling when no other page loads trigger WP-Cron.
 
 = 0.2.2 =
 Fixes batch creation failure caused by outdated DB schema. Schema now auto-upgrades on version change.

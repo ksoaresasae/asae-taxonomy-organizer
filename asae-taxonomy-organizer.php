@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.2.2
+ * Version: 0.2.3
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.2.2');
+define('ASAE_TO_VERSION', '0.2.3');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -669,6 +669,12 @@ class ASAE_Taxonomy_Organizer {
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Unauthorized');
+        }
+
+        // Spawn WP-Cron if any events are due — AJAX requests don't
+        // trigger cron automatically, so the batch would stall without this.
+        if (!defined('DOING_CRON') && !wp_doing_cron()) {
+            spawn_cron();
         }
 
         $batch_id = isset($_POST['batch_id']) ? sanitize_text_field($_POST['batch_id']) : '';
