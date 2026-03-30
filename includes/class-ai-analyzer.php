@@ -21,19 +21,20 @@ class ASAE_TO_AI_Analyzer {
 
     /**
      * Estimated cost per API call by model (USD).
-     * Based on ~700 input tokens + ~50 output tokens per request.
+     * Based on ~900 input tokens (system msg + prompt + 3000-char body + category list)
+     * and ~50 output tokens (JSON with term_id, confidence, and 3 tags).
      *
      * @var array
      */
     private static $estimated_cost_per_call = array(
-        'gpt-4.1-nano'  => 0.00009,
-        'gpt-4o-mini'   => 0.00014,
-        'gpt-5.4-nano'  => 0.0002,
-        'gpt-4.1-mini'  => 0.00036,
-        'gpt-5.4-mini'  => 0.00075,
-        'gpt-4.1'       => 0.0018,
-        'gpt-4o'        => 0.0023,
-        'gpt-5.4'       => 0.0025,
+        'gpt-4.1-nano'  => 0.00011,
+        'gpt-4o-mini'   => 0.00017,
+        'gpt-5.4-nano'  => 0.00021,
+        'gpt-4.1-mini'  => 0.00044,
+        'gpt-5.4-mini'  => 0.0009,
+        'gpt-4.1'       => 0.0022,
+        'gpt-4o'        => 0.0028,
+        'gpt-5.4'       => 0.003,
     );
 
     /**
