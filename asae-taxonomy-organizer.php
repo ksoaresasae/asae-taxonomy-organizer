@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.3.0
+ * Version: 0.3.1
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.3.0');
+define('ASAE_TO_VERSION', '0.3.1');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -88,7 +88,6 @@ class ASAE_Taxonomy_Organizer {
      * @var string
      */
     private $organizer_hook = '';
-    private $settings_hook = '';
     
     /**
      * Get the singleton instance
@@ -342,15 +341,6 @@ class ASAE_Taxonomy_Organizer {
             array($this, 'render_admin_page')
         );
 
-        // Settings page (hidden from menu, accessible via direct link)
-        $this->settings_hook = add_submenu_page(
-            null,
-            __('Taxonomy Organizer - OpenAI Settings', 'asae-taxonomy-organizer'),
-            __('OpenAI Settings', 'asae-taxonomy-organizer'),
-            'manage_options',
-            'asae-taxonomy-organizer-settings',
-            array($this, 'render_settings_page')
-        );
     }
     
     /**
@@ -362,8 +352,8 @@ class ASAE_Taxonomy_Organizer {
      * @param string $hook The current admin page hook
      */
     public function enqueue_admin_assets($hook) {
-        // Only load on our plugin pages
-        if ($hook !== $this->organizer_hook && $hook !== $this->settings_hook) {
+        // Only load on our plugin page
+        if ($hook !== $this->organizer_hook) {
             return;
         }
         
@@ -411,14 +401,6 @@ class ASAE_Taxonomy_Organizer {
 
         $admin = new ASAE_TO_Admin();
         $admin->render();
-    }
-    
-    /**
-     * Render the OpenAI Settings page
-     */
-    public function render_settings_page() {
-        $settings = new ASAE_TO_Settings();
-        $settings->render();
     }
     
     /**

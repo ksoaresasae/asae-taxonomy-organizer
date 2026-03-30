@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,12 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.3.1 =
+* Added tab navigation (Organizer | Settings) matching Content Ingestor pattern
+* Settings (API config, model, cost controls) now accessible via Settings tab instead of hidden page
+* Removed separate hidden settings submenu page
+* All settings links updated to use tab-based URLs
 
 = 0.3.0 =
 * AI now assigns up to 3 keyword tags per post in addition to a category
@@ -123,6 +129,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.3.1 =
+Settings moved to tab navigation alongside Organizer, matching Content Ingestor UI pattern.
 
 = 0.3.0 =
 AI now assigns keyword tags alongside categories. Includes fuzzy tag matching and heartbeat keep-alive.
