@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.4.1
+Stable tag: 0.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,12 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.5.0 =
+* Updated OpenAI model list: added GPT-4.1 family (nano/mini/full), GPT-5.4 family (nano/mini/full)
+* Removed retired models: GPT-4, GPT-4 Turbo, GPT-3.5 Turbo
+* Default model changed from GPT-4o Mini to GPT-4.1 Mini (better value)
+* Updated per-call cost estimates for all models based on current pricing
 
 = 0.4.1 =
 * Added "Check for Updates Now" button on Settings tab to bypass 6-hour cache
@@ -139,6 +145,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.5.0 =
+Updated OpenAI models: added GPT-4.1 and GPT-5.4 families, removed retired models, revised cost estimates.
 
 = 0.4.1 =
 Added manual "Check for Updates Now" button to bypass the 6-hour GitHub API cache.

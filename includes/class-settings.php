@@ -28,11 +28,14 @@ class ASAE_TO_Settings {
      * @var array
      */
     private $available_models = array(
-        'gpt-4o' => 'GPT-4o (Most Capable)',
-        'gpt-4o-mini' => 'GPT-4o Mini (Recommended)',
-        'gpt-4-turbo' => 'GPT-4 Turbo',
-        'gpt-4' => 'GPT-4',
-        'gpt-3.5-turbo' => 'GPT-3.5 Turbo (Fastest/Cheapest)',
+        'gpt-4.1-nano'  => 'GPT-4.1 Nano (Cheapest)',
+        'gpt-4o-mini'   => 'GPT-4o Mini',
+        'gpt-5.4-nano'  => 'GPT-5.4 Nano',
+        'gpt-4.1-mini'  => 'GPT-4.1 Mini (Recommended)',
+        'gpt-5.4-mini'  => 'GPT-5.4 Mini',
+        'gpt-4.1'       => 'GPT-4.1',
+        'gpt-4o'        => 'GPT-4o',
+        'gpt-5.4'       => 'GPT-5.4 (Most Capable)',
     );
     
     /**
@@ -48,7 +51,7 @@ class ASAE_TO_Settings {
         // For production environments with higher security requirements, consider using
         // environment variables (getenv/wp-config.php constants) instead of database storage.
         $api_key = get_option('asae_to_openai_api_key', '');
-        $selected_model = get_option('asae_to_openai_model', 'gpt-4o-mini');
+        $selected_model = get_option('asae_to_openai_model', 'gpt-4.1-mini');
         $use_ai = get_option('asae_to_use_ai', 'no');
         $monthly_limit = get_option('asae_to_monthly_api_call_limit', 0);
         $api_delay = get_option('asae_to_api_call_delay_ms', 200);

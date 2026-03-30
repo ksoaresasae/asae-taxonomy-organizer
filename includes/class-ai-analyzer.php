@@ -21,16 +21,19 @@ class ASAE_TO_AI_Analyzer {
 
     /**
      * Estimated cost per API call by model (USD).
-     * Based on ~700 input tokens + ~20 output tokens per request.
+     * Based on ~700 input tokens + ~50 output tokens per request.
      *
      * @var array
      */
     private static $estimated_cost_per_call = array(
-        'gpt-4o'        => 0.002,
-        'gpt-4o-mini'   => 0.00012,
-        'gpt-4-turbo'   => 0.008,
-        'gpt-4'         => 0.022,
-        'gpt-3.5-turbo' => 0.0004,
+        'gpt-4.1-nano'  => 0.00009,
+        'gpt-4o-mini'   => 0.00014,
+        'gpt-5.4-nano'  => 0.0002,
+        'gpt-4.1-mini'  => 0.00036,
+        'gpt-5.4-mini'  => 0.00075,
+        'gpt-4.1'       => 0.0018,
+        'gpt-4o'        => 0.0023,
+        'gpt-5.4'       => 0.0025,
     );
 
     /**
@@ -96,7 +99,7 @@ class ASAE_TO_AI_Analyzer {
      */
     public static function get_estimated_cost_per_call($model = null) {
         if ($model === null) {
-            $model = get_option('asae_to_openai_model', 'gpt-4o-mini');
+            $model = get_option('asae_to_openai_model', 'gpt-4.1-mini');
         }
         return isset(self::$estimated_cost_per_call[$model])
             ? self::$estimated_cost_per_call[$model]
@@ -112,7 +115,7 @@ class ASAE_TO_AI_Analyzer {
      */
     public static function estimate_cost($item_count, $model = null) {
         if ($model === null) {
-            $model = get_option('asae_to_openai_model', 'gpt-4o-mini');
+            $model = get_option('asae_to_openai_model', 'gpt-4.1-mini');
         }
         $per_call = self::get_estimated_cost_per_call($model);
         return array(
@@ -258,7 +261,7 @@ class ASAE_TO_AI_Analyzer {
             return null;
         }
 
-        $model  = get_option('asae_to_openai_model', 'gpt-4o-mini');
+        $model  = get_option('asae_to_openai_model', 'gpt-4.1-mini');
         $result = $this->call_openai_api_with_confidence($content, $terms, $api_key, $model);
 
         if ($result) {
@@ -281,7 +284,7 @@ class ASAE_TO_AI_Analyzer {
      * @param string $model
      * @return array|null
      */
-    private function call_openai_api_with_confidence($content, $terms, $api_key, $model = 'gpt-4o-mini') {
+    private function call_openai_api_with_confidence($content, $terms, $api_key, $model = 'gpt-4.1-mini') {
         // Rate-limiting delay (configurable, default 200 ms)
         $delay_ms = intval(get_option('asae_to_api_call_delay_ms', 200));
         if ($delay_ms > 0) {

@@ -383,7 +383,7 @@ class ASAE_TO_Admin {
      */
     private function render_settings_tab() {
         $api_key = get_option('asae_to_openai_api_key', '');
-        $selected_model = get_option('asae_to_openai_model', 'gpt-4o-mini');
+        $selected_model = get_option('asae_to_openai_model', 'gpt-4.1-mini');
         $use_ai = get_option('asae_to_use_ai', 'no');
         $monthly_limit = get_option('asae_to_monthly_api_call_limit', 0);
         $api_delay = get_option('asae_to_api_call_delay_ms', 200);
@@ -608,16 +608,16 @@ class ASAE_TO_Admin {
                     <h3><?php _e('Model Recommendations', 'asae-taxonomy-organizer'); ?></h3>
                     <div class="model-recommendations">
                         <div class="model-rec">
-                            <strong>GPT-4o Mini</strong>
-                            <span><?php _e('Best balance of cost and accuracy', 'asae-taxonomy-organizer'); ?></span>
+                            <strong>GPT-4.1 Nano</strong>
+                            <span><?php _e('Cheapest option, great for simple classification', 'asae-taxonomy-organizer'); ?></span>
                         </div>
                         <div class="model-rec">
-                            <strong>GPT-4o</strong>
-                            <span><?php _e('Highest accuracy for complex content', 'asae-taxonomy-organizer'); ?></span>
+                            <strong>GPT-4.1 Mini</strong>
+                            <span><?php _e('Best balance of cost and accuracy (recommended)', 'asae-taxonomy-organizer'); ?></span>
                         </div>
                         <div class="model-rec">
-                            <strong>GPT-3.5 Turbo</strong>
-                            <span><?php _e('Fastest and cheapest option', 'asae-taxonomy-organizer'); ?></span>
+                            <strong>GPT-5.4</strong>
+                            <span><?php _e('Most capable, highest accuracy for complex content', 'asae-taxonomy-organizer'); ?></span>
                         </div>
                     </div>
                 </div>
