@@ -570,6 +570,19 @@ class ASAE_TO_Admin {
                         </tr>
                     </table>
                 </div>
+
+                <div class="asae-to-card">
+                    <h2><?php _e('Plugin Updates', 'asae-taxonomy-organizer'); ?></h2>
+                    <p class="description">
+                        <?php _e('This plugin checks GitHub for new releases automatically. Use the button below to check immediately.', 'asae-taxonomy-organizer'); ?>
+                    </p>
+                    <p>
+                        <button type="button" id="check-updates-btn" class="button">
+                            <?php _e('Check for Updates Now', 'asae-taxonomy-organizer'); ?>
+                        </button>
+                        <span id="update-check-result" style="margin-left: 10px;"></span>
+                    </p>
+                </div>
             </div>
 
             <div class="asae-to-sidebar">

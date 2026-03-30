@@ -1005,6 +1005,36 @@
             $('#asae-to-settings-form').on('submit', this.saveSettings);
             $('#use_ai').on('change', this.updateAIStatus);
             $('#reset-usage-btn').on('click', this.resetUsage);
+
+            $('#check-updates-btn').on('click', function() {
+                var $btn = $(this);
+                var $result = $('#update-check-result');
+                $btn.prop('disabled', true).text('Checking…');
+                $result.text('');
+
+                $.post(asaeToAdmin.ajaxUrl, {
+                    action: 'asae_to_check_updates',
+                    nonce: asaeToAdmin.nonce
+                }, function(response) {
+                    $btn.prop('disabled', false).text('Check for Updates Now');
+                    if (response.success) {
+                        var d = response.data;
+                        if (d.has_update) {
+                            $result.html('<strong style="color:#155724;">Update available: v' +
+                                ASAE_TO.escapeHtml(d.new_version) + '</strong> — go to <a href="' +
+                                asaeToAdmin.pluginsUrl + '">Plugins</a> to update.');
+                        } else {
+                            $result.html('<span style="color:#666;">You are running the latest version (v' +
+                                ASAE_TO.escapeHtml(d.current_version) + ').</span>');
+                        }
+                    } else {
+                        $result.text('Failed to check for updates.');
+                    }
+                }).fail(function() {
+                    $btn.prop('disabled', false).text('Check for Updates Now');
+                    $result.text('Connection error.');
+                });
+            });
         },
 
         testConnection: function(e) {

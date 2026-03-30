@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.4.0
+ * Version: 0.4.1
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.4.0');
+define('ASAE_TO_VERSION', '0.4.1');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -177,6 +177,7 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_reset_usage', array($this, 'ajax_reset_usage'));
         add_action('wp_ajax_asae_to_get_batch_progress', array($this, 'ajax_get_batch_progress'));
         add_action('wp_ajax_asae_to_heartbeat', array($this, 'ajax_heartbeat'));
+        add_action('wp_ajax_asae_to_check_updates', array($this, 'ajax_check_updates'));
         
         // Self-hosted update checker (GitHub Releases)
         new ASAE_TO_GitHub_Updater();
@@ -393,6 +394,7 @@ class ASAE_Taxonomy_Organizer {
             'runningBatchId' => $running_batch ? $running_batch->batch_id : '',
             'runningBatchProcessed' => $running_batch ? intval($running_batch->processed_items) : 0,
             'runningBatchTotal' => $running_batch ? intval($running_batch->total_items) : 0,
+            'pluginsUrl' => admin_url('plugins.php'),
         ));
     }
     
@@ -714,6 +716,40 @@ class ASAE_Taxonomy_Organizer {
     public function ajax_heartbeat() {
         check_ajax_referer('asae_to_nonce', 'nonce');
         wp_send_json_success();
+    }
+
+    /**
+     * AJAX: Clear the GitHub release cache and force WordPress to re-check for updates.
+     */
+    public function ajax_check_updates() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        // Clear the cached GitHub release data
+        delete_transient('asae_to_github_release');
+
+        // Force WordPress to re-check plugin updates
+        delete_site_transient('update_plugins');
+
+        // Fetch fresh release info
+        $updater_class = 'ASAE_TO_GitHub_Updater';
+        if (class_exists($updater_class)) {
+            $updater = new $updater_class();
+            wp_update_plugins();
+        }
+
+        // Check if an update is now available
+        $update_plugins = get_site_transient('update_plugins');
+        $has_update = isset($update_plugins->response[ASAE_TO_PLUGIN_BASENAME]);
+        $new_version = $has_update ? $update_plugins->response[ASAE_TO_PLUGIN_BASENAME]->new_version : null;
+
+        wp_send_json_success(array(
+            'current_version' => ASAE_TO_VERSION,
+            'has_update'      => $has_update,
+            'new_version'     => $new_version,
+        ));
     }
 
     /**

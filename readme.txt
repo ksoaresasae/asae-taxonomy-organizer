@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,10 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.4.1 =
+* Added "Check for Updates Now" button on Settings tab to bypass 6-hour cache
+* Clears GitHub release transient and forces WordPress update check on demand
 
 = 0.4.0 =
 * Self-hosted auto-updater: WordPress now checks GitHub Releases for new versions
@@ -135,6 +139,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.4.1 =
+Added manual "Check for Updates Now" button to bypass the 6-hour GitHub API cache.
 
 = 0.4.0 =
 Self-hosted auto-updater checks GitHub Releases for new versions. One-click update from WP Plugins list.
