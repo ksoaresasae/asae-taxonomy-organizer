@@ -498,12 +498,31 @@
         initResumeBanner: function() {
             if (asaeToAdmin.runningBatchId) {
                 var $banner = $('#asae-to-resume-banner');
-                $('#asae-to-resume-detail').text(
-                    ' ' + asaeToAdmin.runningBatchProcessed + ' of ' +
-                    asaeToAdmin.runningBatchTotal + ' items processed so far.'
-                );
+                var detail = ' ' + asaeToAdmin.runningBatchProcessed + ' of ' +
+                    asaeToAdmin.runningBatchTotal + ' items processed so far.';
+
+                if (asaeToAdmin.runningBatchStatus === 'paused') {
+                    var reason = asaeToAdmin.runningBatchPauseReason === 'rate_limited' ? 'rate limited by OpenAI' :
+                                 asaeToAdmin.runningBatchPauseReason === 'budget_exceeded' ? 'monthly budget reached' : 'API error';
+                    detail += ' Paused (' + reason + ').';
+                    if (asaeToAdmin.runningBatchNextRetry) {
+                        detail += ' Will auto-retry at ' + asaeToAdmin.runningBatchNextRetry + '.';
+                    }
+                    detail += ' You can leave this page — processing will resume automatically via cron.';
+                } else {
+                    detail += ' Processing continues in the background.';
+                }
+
+                $('#asae-to-resume-detail').text(detail);
                 $banner.show();
             }
+
+            // Restart polling when tab returns from sleep/background
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden && ASAE_TO.currentBatchId && !ASAE_TO.batchPollTimer) {
+                    ASAE_TO.pollBatchProgress();
+                }
+            });
         },
 
         resumeBatch: function() {
@@ -609,14 +628,20 @@
                     ASAE_TO.setProgressBar(pct);
 
                     if (d.status === 'paused') {
-                        var reason = d.pause_reason === 'rate_limited' ? 'rate limited' :
-                                     d.pause_reason === 'budget_exceeded' ? 'budget reached' : 'API error';
+                        var reason = d.pause_reason === 'rate_limited' ? 'rate limited by OpenAI' :
+                                     d.pause_reason === 'budget_exceeded' ? 'monthly budget reached' : 'API error';
                         var retryText = d.next_retry_at
-                            ? ' Retrying at ' + ASAE_TO.formatDateTime(d.next_retry_at) + '.'
+                            ? ' Will auto-retry at ' + ASAE_TO.formatDateTime(d.next_retry_at) + '.'
                             : '';
-                        $('#asae-to-phase-label').text('Paused (' + reason + ').' + retryText);
+                        $('#asae-to-phase-label').html(
+                            '<span class="asae-to-paused-label">Paused — ' + reason + '.</span>' +
+                            retryText +
+                            '<br><small>You can close this page. Processing resumes automatically via background cron.</small>'
+                        );
+                        $('#asae-to-progress-panel').addClass('asae-to-panel-paused');
                     } else if (d.status === 'processing' || d.status === 'pending') {
                         $('#asae-to-phase-label').text('Processing… ' + d.processed_items + ' of ' + d.total_items);
+                        $('#asae-to-progress-panel').removeClass('asae-to-panel-paused');
                     }
 
                     if (d.is_complete) {

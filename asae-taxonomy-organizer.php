@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.5.1
+ * Version: 0.5.2
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.5.1');
+define('ASAE_TO_VERSION', '0.5.2');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -394,6 +394,9 @@ class ASAE_Taxonomy_Organizer {
             'runningBatchId' => $running_batch ? $running_batch->batch_id : '',
             'runningBatchProcessed' => $running_batch ? intval($running_batch->processed_items) : 0,
             'runningBatchTotal' => $running_batch ? intval($running_batch->total_items) : 0,
+            'runningBatchStatus' => $running_batch ? $running_batch->status : '',
+            'runningBatchPauseReason' => $running_batch && isset($running_batch->pause_reason) ? $running_batch->pause_reason : '',
+            'runningBatchNextRetry' => $running_batch && isset($running_batch->next_retry_at) ? $running_batch->next_retry_at : '',
             'pluginsUrl' => admin_url('plugins.php'),
         ));
     }

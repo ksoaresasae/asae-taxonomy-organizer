@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.5.1
+Stable tag: 0.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,12 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.5.2 =
+* Improved batch pause/stall UX: progress panel turns amber with clear explanation when paused
+* Resume banner now shows pause reason, retry time, and guidance to close the page safely
+* Added Page Visibility API listener to restart polling when browser tab wakes from sleep
+* Batch status, pause reason, and next retry time now passed to JS on page load
 
 = 0.5.1 =
 * Refined per-call cost estimates to account for full prompt size (~900 input + ~50 output tokens)

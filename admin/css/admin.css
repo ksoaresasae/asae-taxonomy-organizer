@@ -837,6 +837,21 @@
     transition: width 0.3s ease;
 }
 
+/* Paused state for progress panel */
+.asae-to-panel-paused {
+    border-left: 4px solid #dba617;
+    background: #fffbf0;
+}
+
+.asae-to-panel-paused .asae-to-progress-bar {
+    background: #dba617;
+}
+
+.asae-to-paused-label {
+    color: #856404;
+    font-weight: 600;
+}
+
 .asae-to-complete-notice {
     padding: 10px 15px;
     background: #edfaef;
