@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.2.4
+ * Version: 0.3.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.2.4');
+define('ASAE_TO_VERSION', '0.3.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -174,6 +174,7 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_test_connection', array($this, 'ajax_test_connection'));
         add_action('wp_ajax_asae_to_reset_usage', array($this, 'ajax_reset_usage'));
         add_action('wp_ajax_asae_to_get_batch_progress', array($this, 'ajax_get_batch_progress'));
+        add_action('wp_ajax_asae_to_heartbeat', array($this, 'ajax_heartbeat'));
         
         // Plugin lifecycle hooks
         register_activation_hook(__FILE__, array($this, 'activate'));
@@ -720,10 +721,18 @@ class ASAE_Taxonomy_Organizer {
     }
 
     /**
+     * AJAX: Lightweight heartbeat to keep the browser tab alive during processing.
+     */
+    public function ajax_heartbeat() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        wp_send_json_success();
+    }
+
+    /**
      * AJAX: Save OpenAI settings
-     * 
+     *
      * Saves the API key and model selection to WordPress options.
-     * 
+     *
      * Security Note: API keys are stored in wp_options which is NOT encrypted by default.
      * For production environments with higher security requirements, consider using
      * environment variables or a dedicated secrets management solution.

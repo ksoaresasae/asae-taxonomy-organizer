@@ -63,6 +63,7 @@ class ASAE_TO_AI_Analyzer {
                         'term'             => $term,
                         'confidence'       => $result['confidence'],
                         'confidence_level' => $this->get_confidence_level($result['confidence']),
+                        'tags'             => isset($result['tags']) ? $result['tags'] : array(),
                     );
                 }
             }
@@ -293,17 +294,19 @@ class ASAE_TO_AI_Analyzer {
             return $term['name'] . ' (ID: ' . $term['term_id'] . ')' . $desc;
         }, $terms);
 
-        $prompt  = "Analyze the following content and select the single most appropriate category from the list provided.\n\n";
+        $prompt  = "Analyze the following content and:\n";
+        $prompt .= "1. Select the single most appropriate category from the list provided.\n";
+        $prompt .= "2. Suggest up to 3 short keyword tags (1-3 words each) that describe the content's key topics. Tags should be general enough to apply across multiple articles.\n\n";
         $prompt .= "Content Title: " . $content['title'] . "\n\n";
         $prompt .= "Content Body:\n" . substr($content['content'], 0, 3000) . "\n\n";
         $prompt .= "Available Categories:\n" . implode("\n", $term_list) . "\n\n";
-        $prompt .= "Respond ONLY with valid JSON in this exact format: {\"term_id\": <number>, \"confidence\": <0-100>}\n";
+        $prompt .= "Respond ONLY with valid JSON in this exact format: {\"term_id\": <number>, \"confidence\": <0-100>, \"tags\": [\"tag1\", \"tag2\", \"tag3\"]}\n";
         $prompt .= "The confidence should reflect how well the content matches the category:\n";
         $prompt .= "- 90-100: Perfect, unambiguous match\n";
         $prompt .= "- 70-89: Strong match with clear relevance\n";
         $prompt .= "- 50-69: Moderate match, reasonable choice\n";
         $prompt .= "- Below 50: Weak match, unsure\n";
-        $prompt .= "Do not include any explanation, just the JSON.";
+        $prompt .= "Always include the tags array, even if empty. Do not include any explanation, just the JSON.";
 
         $response = wp_remote_post('https://api.openai.com/v1/chat/completions', array(
             'headers' => array(
@@ -313,10 +316,10 @@ class ASAE_TO_AI_Analyzer {
             'body'    => wp_json_encode(array(
                 'model'       => $model,
                 'messages'    => array(
-                    array('role' => 'system', 'content' => 'You are a content categorization assistant. Analyze content and select the most appropriate category. Always respond in valid JSON format with term_id and confidence fields only. No explanations.'),
+                    array('role' => 'system', 'content' => 'You are a content categorization and tagging assistant. Analyze content, select the most appropriate category, and suggest up to 3 keyword tags. Always respond in valid JSON format with term_id, confidence, and tags fields. No explanations.'),
                     array('role' => 'user', 'content' => $prompt),
                 ),
-                'max_tokens'  => 50,
+                'max_tokens'  => 100,
                 'temperature' => 0.3,
             )),
             'timeout' => 30,
@@ -353,12 +356,14 @@ class ASAE_TO_AI_Analyzer {
             if ($parsed && isset($parsed['term_id']) && isset($parsed['confidence'])) {
                 $term_id    = intval($parsed['term_id']);
                 $confidence = min(100, max(0, intval($parsed['confidence'])));
+                $tags       = isset($parsed['tags']) && is_array($parsed['tags']) ? array_slice($parsed['tags'], 0, 3) : array();
 
                 foreach ($terms as $term) {
                     if ($term['term_id'] === $term_id) {
                         return array(
                             'term_id'    => $term_id,
                             'confidence' => $confidence,
+                            'tags'       => $tags,
                         );
                     }
                 }
@@ -441,6 +446,7 @@ class ASAE_TO_AI_Analyzer {
             return array(
                 'term_id'    => $best_match['term_id'],
                 'confidence' => $confidence,
+                'tags'       => array(),
             );
         }
 
@@ -448,6 +454,7 @@ class ASAE_TO_AI_Analyzer {
             return array(
                 'term_id'    => $terms[0]['term_id'],
                 'confidence' => 10,
+                'tags'       => array(),
             );
         }
 

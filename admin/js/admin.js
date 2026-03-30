@@ -29,6 +29,7 @@
 
         currentBatchId: null,
         batchPollTimer: null,
+        heartbeatTimer: null,
 
         init: function() {
             this.bindEvents();
@@ -270,6 +271,7 @@
         // =====================================================================
 
         processPreviewChunked: function(formData) {
+            ASAE_TO.startHeartbeat();
             var $resultsCard = $('#results-card');
             var $resultsContainer = $('#results-container');
             var $resultsSummary = $('#results-summary');
@@ -366,10 +368,14 @@
                 var statusClass = result.saved ? 'saved' : (result.needs_review ? 'pending' : 'skipped');
                 var statusText = result.saved ? 'Saved' : (result.needs_review ? 'Pending Review' : 'Skipped');
 
+                var tagsJson = result.suggested_tags && result.suggested_tags.length > 0
+                    ? ASAE_TO.escapeHtml(JSON.stringify(result.suggested_tags)) : '';
+
                 var html = '<div class="result-item-enhanced" ' +
                     'data-post-id="' + result.post_id + '" ' +
                     'data-term-id="' + result.term_id + '" ' +
-                    'data-term-name="' + ASAE_TO.escapeHtml(result.suggested_category) + '">';
+                    'data-term-name="' + ASAE_TO.escapeHtml(result.suggested_category) + '" ' +
+                    'data-tags="' + tagsJson + '">';
 
                 if (result.needs_review && result.term_id) {
                     html += '<input type="checkbox" class="result-checkbox" checked aria-label="Select: ' + ASAE_TO.escapeHtml(result.title) + '">';
@@ -385,6 +391,13 @@
                 html += '<div class="result-meta-row">';
                 html += '<span class="result-category">' + ASAE_TO.escapeHtml(result.suggested_category) + '</span>';
                 html += '<span class="confidence-badge ' + confidenceClass + '">' + result.confidence + '%</span>';
+                if (result.suggested_tags && result.suggested_tags.length > 0) {
+                    html += '<span class="result-tags">';
+                    $.each(result.suggested_tags, function(j, tag) {
+                        html += '<span class="result-tag">' + ASAE_TO.escapeHtml(tag) + '</span>';
+                    });
+                    html += '</span>';
+                }
                 html += '<span class="result-status ' + statusClass + '">' + statusText + '</span>';
                 html += '</div></div>';
 
@@ -403,6 +416,7 @@
         },
 
         finishChunkedPreview: function(errorMsg, processed) {
+            ASAE_TO.stopHeartbeat();
             $('.chunked-progress').remove();
             $('#processing-spinner').removeClass('is-active');
             $('#process-btn').prop('disabled', false);
@@ -467,6 +481,20 @@
         // Inline batch progress (Content Ingestor pattern)
         // =====================================================================
 
+        startHeartbeat: function() {
+            ASAE_TO.stopHeartbeat();
+            ASAE_TO.heartbeatTimer = setInterval(function() {
+                $.post(asaeToAdmin.ajaxUrl, { action: 'asae_to_heartbeat', nonce: asaeToAdmin.nonce });
+            }, 30000);
+        },
+
+        stopHeartbeat: function() {
+            if (ASAE_TO.heartbeatTimer) {
+                clearInterval(ASAE_TO.heartbeatTimer);
+                ASAE_TO.heartbeatTimer = null;
+            }
+        },
+
         initResumeBanner: function() {
             if (asaeToAdmin.runningBatchId) {
                 var $banner = $('#asae-to-resume-banner');
@@ -529,6 +557,7 @@
         },
 
         showInlineProgress: function(totalItems) {
+            ASAE_TO.startHeartbeat();
             $('#processing-spinner').removeClass('is-active');
             $('#process-btn').prop('disabled', true);
             $('#asae-to-progress-panel').show();
@@ -608,6 +637,7 @@
         },
 
         finishBatchProgress: function(message) {
+            ASAE_TO.stopHeartbeat();
             ASAE_TO.currentBatchId = null;
             if (ASAE_TO.batchPollTimer) {
                 clearTimeout(ASAE_TO.batchPollTimer);
@@ -678,6 +708,7 @@
             var $item = $btn.closest('.result-item-enhanced');
             var postId = $btn.data('post-id');
             var termId = $btn.data('term-id');
+            var tags = ASAE_TO.getItemTags($item);
 
             $btn.prop('disabled', true).text('Saving...');
 
@@ -688,7 +719,7 @@
                     action: 'asae_to_save_items',
                     nonce: asaeToAdmin.nonce,
                     taxonomy: ASAE_TO.currentTaxonomy,
-                    items: JSON.stringify([{post_id: postId, term_id: termId}])
+                    items: JSON.stringify([{post_id: postId, term_id: termId, tags: tags}])
                 },
                 success: function(response) {
                     if (response.success) {
@@ -820,8 +851,16 @@
 
         approveAll: function(e) {
             e.preventDefault();
-            var itemsToSave = ASAE_TO.pendingResults.map(function(r) {
-                return {post_id: r.post_id, term_id: r.term_id};
+            var itemsToSave = [];
+            $('.result-item-enhanced').each(function() {
+                var $item = $(this);
+                if ($item.find('.result-checkbox').length) {
+                    itemsToSave.push({
+                        post_id: $item.data('post-id'),
+                        term_id: $item.data('term-id'),
+                        tags: ASAE_TO.getItemTags($item)
+                    });
+                }
             });
             if (itemsToSave.length === 0) { alert('No items to approve.'); return; }
 
@@ -870,7 +909,11 @@
                 var $item = $(this);
                 var $cb = $item.find('.result-checkbox');
                 if ($cb.length && $cb.is(':checked')) {
-                    itemsToSave.push({ post_id: $item.data('post-id'), term_id: $item.data('term-id') });
+                    itemsToSave.push({
+                        post_id: $item.data('post-id'),
+                        term_id: $item.data('term-id'),
+                        tags: ASAE_TO.getItemTags($item)
+                    });
                 }
             });
             if (itemsToSave.length === 0) { alert('No items selected.'); return; }
@@ -1083,6 +1126,12 @@
             var div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        },
+
+        getItemTags: function($item) {
+            var tagsAttr = $item.attr('data-tags');
+            if (!tagsAttr) return [];
+            try { return JSON.parse(tagsAttr); } catch(e) { return []; }
         },
 
         capitalize: function(str) {

@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.2.4
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,14 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.3.0 =
+* AI now assigns up to 3 keyword tags per post in addition to a category
+* Fuzzy tag matching: reuses existing similar tags (exact, slug, and similarity matching) before creating new ones
+* Added heartbeat keep-alive during processing to prevent browser tab sleep
+* Tags are displayed as pills in preview results and carried through the approval workflow
+* Batch processing, direct save, and preview approval all support tag assignment
+* Keyword matching mode returns no tags (AI-only feature)
 
 = 0.2.4 =
 * Added "Cancel All Jobs" button to resume banner for clearing stale batches before starting a new run
@@ -115,6 +123,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 * Keyword matching fallback
 
 == Upgrade Notice ==
+
+= 0.3.0 =
+AI now assigns keyword tags alongside categories. Includes fuzzy tag matching and heartbeat keep-alive.
 
 = 0.2.4 =
 Adds Cancel All Jobs button for cleaning up stale batches before large runs.

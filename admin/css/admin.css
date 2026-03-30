@@ -768,6 +768,26 @@
 }
 
 /* =============================================================================
+   Tag Pills (suggested keyword tags in results)
+   ============================================================================= */
+
+.result-tags {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.result-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    background: #e0ecf5;
+    color: #1d4e7e;
+}
+
+/* =============================================================================
    Version Badge
    ============================================================================= */
 

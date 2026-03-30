@@ -152,6 +152,7 @@ class ASAE_TO_Processor {
                 'term_id'            => $analysis ? $analysis['term']->term_id : null,
                 'confidence'         => $analysis ? $analysis['confidence'] : 0,
                 'confidence_level'   => $analysis ? $analysis['confidence_level'] : 'low',
+                'suggested_tags'     => $analysis && !empty($analysis['tags']) ? $analysis['tags'] : array(),
                 'saved'              => false,
                 'needs_review'       => true,
             );
@@ -237,6 +238,7 @@ class ASAE_TO_Processor {
         foreach ($items as $item) {
             $post_id = isset($item['post_id']) ? intval($item['post_id']) : 0;
             $term_id = isset($item['term_id']) ? intval($item['term_id']) : 0;
+            $tags    = isset($item['tags']) && is_array($item['tags']) ? $item['tags'] : array();
 
             if ($post_id > 0 && $term_id > 0) {
                 if (get_post_status($post_id) !== false) {
@@ -245,6 +247,9 @@ class ASAE_TO_Processor {
                         $result = wp_set_object_terms($post_id, $term_id, $taxonomy, false);
                         if (!is_wp_error($result)) {
                             $saved++;
+                            if (!empty($tags)) {
+                                $this->resolve_and_assign_tags($post_id, $tags);
+                            }
                         } else {
                             $failed++;
                         }
@@ -375,6 +380,9 @@ class ASAE_TO_Processor {
 
             if ($analysis && $analysis['confidence'] >= $confidence_threshold) {
                 wp_set_object_terms($post->ID, $analysis['term']->term_id, $batch->taxonomy, false);
+                if (!empty($analysis['tags'])) {
+                    $this->resolve_and_assign_tags($post->ID, $analysis['tags']);
+                }
             }
 
             // Track API call if AI was used
@@ -464,6 +472,8 @@ class ASAE_TO_Processor {
                 $analysis = null;
             }
 
+            $suggested_tags = $analysis && !empty($analysis['tags']) ? $analysis['tags'] : array();
+
             $result = array(
                 'post_id'            => $post->ID,
                 'title'              => $post->post_title,
@@ -472,6 +482,7 @@ class ASAE_TO_Processor {
                 'term_id'            => $analysis ? $analysis['term']->term_id : null,
                 'confidence'         => $analysis ? $analysis['confidence'] : 0,
                 'confidence_level'   => $analysis ? $analysis['confidence_level'] : 'low',
+                'suggested_tags'     => $suggested_tags,
                 'saved'              => false,
                 'needs_review'       => true,
             );
@@ -481,6 +492,9 @@ class ASAE_TO_Processor {
                     $set_result = wp_set_object_terms($post->ID, $analysis['term']->term_id, $taxonomy, false);
                     $result['saved']        = !is_wp_error($set_result);
                     $result['needs_review'] = false;
+                    if ($result['saved']) {
+                        $this->resolve_and_assign_tags($post->ID, $suggested_tags);
+                    }
                     $auto_saved++;
                 } else {
                     $needs_review++;
@@ -577,6 +591,100 @@ class ASAE_TO_Processor {
         );
         $batch_manager->cancel_scheduled($batch_id);
         delete_transient($lock_key);
+    }
+
+    /**
+     * Resolve suggested tag strings against existing tags (fuzzy matching)
+     * and assign them to a post. Creates new tags only when no match is found.
+     *
+     * @param int   $post_id
+     * @param array $suggested_tags Array of tag name strings
+     */
+    private function resolve_and_assign_tags($post_id, $suggested_tags) {
+        if (empty($suggested_tags)) {
+            return;
+        }
+
+        // Cache existing tags for the batch
+        static $existing_tags = null;
+        if ($existing_tags === null) {
+            $all_tags = get_terms(array('taxonomy' => 'post_tag', 'hide_empty' => false));
+            $existing_tags = is_wp_error($all_tags) ? array() : $all_tags;
+        }
+
+        $tag_ids = array();
+
+        foreach ($suggested_tags as $tag_name) {
+            $tag_name = trim($tag_name);
+            if (empty($tag_name)) {
+                continue;
+            }
+
+            $match = null;
+            $tag_lower = strtolower($tag_name);
+            $candidate_slug = sanitize_title($tag_name);
+
+            // 1. Exact name match (case-insensitive)
+            foreach ($existing_tags as $existing) {
+                if (strtolower($existing->name) === $tag_lower) {
+                    $match = $existing;
+                    break;
+                }
+            }
+
+            // 2. Slug match (handles punctuation: "A.I." vs "AI")
+            if (!$match) {
+                foreach ($existing_tags as $existing) {
+                    if ($existing->slug === $candidate_slug) {
+                        $match = $existing;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Fuzzy match — similar_text or containment
+            if (!$match) {
+                $best_pct = 0;
+                $best_candidate = null;
+
+                foreach ($existing_tags as $existing) {
+                    $existing_lower = strtolower($existing->name);
+
+                    // Containment check (one is a substring of the other)
+                    $contains = (strpos($existing_lower, $tag_lower) !== false ||
+                                 strpos($tag_lower, $existing_lower) !== false);
+
+                    similar_text($tag_lower, $existing_lower, $pct);
+
+                    if (($pct >= 85 || $contains) && $pct > $best_pct) {
+                        $best_pct = $pct;
+                        $best_candidate = $existing;
+                    }
+                }
+
+                if ($best_candidate) {
+                    $match = $best_candidate;
+                }
+            }
+
+            if ($match) {
+                $tag_ids[] = $match->term_id;
+            } else {
+                $new_term = wp_insert_term($tag_name, 'post_tag');
+                if (!is_wp_error($new_term)) {
+                    $tag_ids[] = $new_term['term_id'];
+                    // Add to cache so subsequent items can match it
+                    $new_tag_obj = get_term($new_term['term_id'], 'post_tag');
+                    if ($new_tag_obj && !is_wp_error($new_tag_obj)) {
+                        $existing_tags[] = $new_tag_obj;
+                    }
+                }
+            }
+        }
+
+        if (!empty($tag_ids)) {
+            wp_set_object_terms($post_id, $tag_ids, 'post_tag', true); // append
+        }
     }
 
     /**
