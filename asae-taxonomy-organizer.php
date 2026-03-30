@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.3.1
+ * Version: 0.4.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.3.1');
+define('ASAE_TO_VERSION', '0.4.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -138,6 +138,9 @@ class ASAE_Taxonomy_Organizer {
         
         // Rejection feedback logging
         require_once ASAE_TO_PLUGIN_DIR . 'includes/class-feedback-logger.php';
+
+        // Self-hosted GitHub updater
+        require_once ASAE_TO_PLUGIN_DIR . 'includes/class-github-updater.php';
     }
     
     /**
@@ -175,6 +178,9 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_get_batch_progress', array($this, 'ajax_get_batch_progress'));
         add_action('wp_ajax_asae_to_heartbeat', array($this, 'ajax_heartbeat'));
         
+        // Self-hosted update checker (GitHub Releases)
+        new ASAE_TO_GitHub_Updater();
+
         // Plugin lifecycle hooks
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
