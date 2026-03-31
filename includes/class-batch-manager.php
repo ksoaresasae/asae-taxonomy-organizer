@@ -329,11 +329,12 @@ class ASAE_TO_Batch_Manager {
             // Clear any stale lock
             delete_transient('asae_to_lock_' . $batch->batch_id);
 
-            // Reschedule
+            // Run directly — don't just reschedule, since cron loopback
+            // may be broken (which is likely why the batch stalled)
             $this->cancel_scheduled($batch->batch_id);
-            $this->schedule_batch($batch->batch_id, 10);
+            $this->run_chunk_directly($batch->batch_id);
 
-            error_log('ASAE Taxonomy Organizer: Requeued stalled batch ' . $batch->batch_id);
+            error_log('ASAE Taxonomy Organizer: Ran stalled batch ' . $batch->batch_id . ' directly');
             $requeued++;
         }
 
