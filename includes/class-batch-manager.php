@@ -235,49 +235,74 @@ class ASAE_TO_Batch_Manager {
     }
 
     /**
-     * Find paused batches whose next_retry_at has passed but have no scheduled
-     * cron event (e.g. because WP-Cron never fired while paused).  Re-schedule
-     * them immediately.
+     * Find batches that should be running but aren't.  Handles:
+     * - Paused batches whose retry time has passed
+     * - Pending/processing batches with overdue cron events (loopback broken)
+     * - Orphaned batches with no cron event at all
      *
-     * @return int Number of batches requeued
+     * When a cron event is overdue, runs the chunk directly instead of
+     * re-scheduling (since WP-Cron loopback may be broken on this host).
+     *
+     * @return int Number of batches kicked
      */
     public function requeue_overdue_paused() {
         global $wpdb;
         $table_name = $wpdb->prefix . 'asae_to_batches';
-
         $now = gmdate('Y-m-d H:i:s');
+        $kicked = 0;
 
+        // 1. Paused batches whose retry time has passed
         $overdue = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM $table_name WHERE status = 'paused' AND next_retry_at IS NOT NULL AND next_retry_at <= %s",
             $now
         ));
 
-        $requeued = 0;
-
         foreach ($overdue as $batch) {
-            // Only reschedule if no cron event is already pending
-            if (!wp_next_scheduled('asae_to_process_batch', array($batch->batch_id))) {
-                delete_transient('asae_to_lock_' . $batch->batch_id);
-                $this->schedule_batch($batch->batch_id, 5);
-                error_log('ASAE Taxonomy Organizer: Requeued overdue paused batch ' . $batch->batch_id);
-                $requeued++;
-            }
+            delete_transient('asae_to_lock_' . $batch->batch_id);
+            $this->cancel_scheduled($batch->batch_id);
+            $this->run_chunk_directly($batch->batch_id);
+            $kicked++;
         }
 
-        // Also requeue pending batches with no cron event
-        $pending = $wpdb->get_results(
-            "SELECT * FROM $table_name WHERE status = 'pending'"
+        // 2. Pending/processing batches with overdue or missing cron events
+        $active = $wpdb->get_results(
+            "SELECT * FROM $table_name WHERE status IN ('pending', 'processing')"
         );
 
-        foreach ($pending as $batch) {
-            if (!wp_next_scheduled('asae_to_process_batch', array($batch->batch_id))) {
-                $this->schedule_batch($batch->batch_id, 5);
-                error_log('ASAE Taxonomy Organizer: Requeued orphaned pending batch ' . $batch->batch_id);
-                $requeued++;
+        foreach ($active as $batch) {
+            $scheduled = wp_next_scheduled('asae_to_process_batch', array($batch->batch_id));
+            $lock_held = (bool) get_transient('asae_to_lock_' . $batch->batch_id);
+
+            if ($lock_held) {
+                continue; // A chunk is currently running
+            }
+
+            if (!$scheduled) {
+                // No cron event at all — orphaned
+                $this->run_chunk_directly($batch->batch_id);
+                error_log('ASAE Taxonomy Organizer: Ran orphaned batch ' . $batch->batch_id . ' directly');
+                $kicked++;
+            } elseif ($scheduled <= time()) {
+                // Cron event is overdue — loopback probably broken
+                $this->cancel_scheduled($batch->batch_id);
+                $this->run_chunk_directly($batch->batch_id);
+                error_log('ASAE Taxonomy Organizer: Ran overdue batch ' . $batch->batch_id . ' directly (cron loopback may be broken)');
+                $kicked++;
             }
         }
 
-        return $requeued;
+        return $kicked;
+    }
+
+    /**
+     * Run a single batch chunk directly (bypassing WP-Cron).
+     * Used as a fallback when the cron loopback is broken.
+     *
+     * @param string $batch_id
+     */
+    private function run_chunk_directly($batch_id) {
+        $processor = new ASAE_TO_Processor();
+        $processor->process_batch_chunk($batch_id);
     }
 
     /**

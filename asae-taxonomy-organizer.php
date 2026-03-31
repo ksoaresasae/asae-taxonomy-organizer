@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.6.1
+ * Version: 0.7.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.6.1');
+define('ASAE_TO_VERSION', '0.7.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -715,12 +715,6 @@ class ASAE_Taxonomy_Organizer {
             wp_send_json_error('Unauthorized');
         }
 
-        // Spawn WP-Cron if any events are due — AJAX requests don't
-        // trigger cron automatically, so the batch would stall without this.
-        if (!defined('DOING_CRON') && !wp_doing_cron()) {
-            spawn_cron();
-        }
-
         $batch_id = isset($_POST['batch_id']) ? sanitize_text_field($_POST['batch_id']) : '';
 
         if (empty($batch_id)) {
@@ -742,6 +736,37 @@ class ASAE_Taxonomy_Organizer {
         $updated_ts = isset($batch->updated_at) ? strtotime($batch->updated_at) : 0;
         $idle_seconds = $updated_ts > 0 ? time() - $updated_ts : 0;
 
+        // Direct execution fallback: if cron is overdue and batch is idle,
+        // WP-Cron loopback is probably broken on this host.  Run the
+        // processor directly from this AJAX request instead of waiting.
+        $ran_directly = false;
+        if (
+            in_array($batch->status, array('pending', 'processing', 'paused'), true)
+            && !$lock_held
+            && $idle_seconds > 60
+            && $cron_scheduled && $cron_scheduled <= time()
+        ) {
+            // Clear the stale cron event
+            $batch_manager->cancel_scheduled($batch->batch_id);
+
+            // Run one chunk synchronously
+            $processor = new ASAE_TO_Processor();
+            $processor->process_batch_chunk($batch->batch_id);
+
+            // Re-read batch state after processing
+            $batch = $batch_manager->get_batch($batch_id);
+            $cron_scheduled = wp_next_scheduled('asae_to_process_batch', array($batch->batch_id));
+            $lock_held = (bool) get_transient('asae_to_lock_' . $batch->batch_id);
+            $updated_ts = isset($batch->updated_at) ? strtotime($batch->updated_at) : 0;
+            $idle_seconds = $updated_ts > 0 ? time() - $updated_ts : 0;
+            $ran_directly = true;
+        } else {
+            // Try spawn_cron as usual
+            if (!defined('DOING_CRON') && !wp_doing_cron()) {
+                spawn_cron();
+            }
+        }
+
         wp_send_json_success(array(
             'batch_id'        => $batch->batch_id,
             'status'          => $batch->status,
@@ -756,6 +781,7 @@ class ASAE_Taxonomy_Organizer {
             'cron_scheduled'  => $cron_scheduled ? true : false,
             'cron_due_in'     => $cron_scheduled ? max(0, $cron_scheduled - time()) : null,
             'lock_held'       => $lock_held,
+            'ran_directly'    => $ran_directly,
         ));
     }
 

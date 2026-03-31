@@ -671,6 +671,9 @@
                     if (d.lock_held) {
                         diag.push('lock: held');
                     }
+                    if (d.ran_directly) {
+                        diag.push('ran chunk directly (cron bypass)');
+                    }
                     $('#asae-to-diagnostics').text(diag.join(' · '));
 
                     if (d.is_complete) {
