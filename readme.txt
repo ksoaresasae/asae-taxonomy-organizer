@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.5.2
+Stable tag: 0.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,13 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.6.0 =
+* Fixed batch processing stalling overnight: WP-Cron only fires on page visits, so paused batches with expired retry times were never requeued
+* Added recurring watchdog cron (every 5 minutes) that detects overdue paused batches and reschedules them
+* Admin page load now runs the watchdog immediately, so visiting the plugin page requeues any stuck batch
+* Heartbeat AJAX now calls spawn_cron() to keep cron alive while the tab is open
+* Also catches orphaned pending batches with no cron event
 
 = 0.5.2 =
 * Improved batch pause/stall UX: progress panel turns amber with clear explanation when paused

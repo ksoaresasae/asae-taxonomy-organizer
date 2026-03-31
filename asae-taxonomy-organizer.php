@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.5.2
+ * Version: 0.6.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.5.2');
+define('ASAE_TO_VERSION', '0.6.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -150,6 +150,9 @@ class ASAE_Taxonomy_Organizer {
      * plugin's functionality. Organized by type for easier maintenance.
      */
     private function init_hooks() {
+        // Custom cron schedule for watchdog
+        add_filter('cron_schedules', array($this, 'add_cron_schedules'));
+
         // Auto-upgrade DB schema when plugin version changes
         add_action('admin_init', array($this, 'maybe_upgrade_db'));
 
@@ -197,6 +200,12 @@ class ASAE_Taxonomy_Organizer {
         $this->create_batch_table();
         $this->create_feedback_table();
         $this->maybe_migrate_batch_table();
+
+        // Schedule the batch watchdog (every 5 minutes)
+        if (!wp_next_scheduled('asae_to_batch_watchdog')) {
+            wp_schedule_event(time(), 'asae_to_five_minutes', 'asae_to_batch_watchdog');
+        }
+
         flush_rewrite_rules();
     }
     
@@ -208,17 +217,41 @@ class ASAE_Taxonomy_Organizer {
      */
     public function deactivate() {
         wp_clear_scheduled_hook('asae_to_process_batch');
+        wp_clear_scheduled_hook('asae_to_batch_watchdog');
     }
     
     /**
      * Run DB schema updates when the plugin version changes.
      */
+    /**
+     * Register custom cron schedules.
+     */
+    public function add_cron_schedules($schedules) {
+        $schedules['asae_to_five_minutes'] = array(
+            'interval' => 300,
+            'display'  => __('Every 5 Minutes', 'asae-taxonomy-organizer'),
+        );
+        return $schedules;
+    }
+
     public function maybe_upgrade_db() {
         $installed_version = get_option('asae_to_db_version', '0');
         if (version_compare($installed_version, ASAE_TO_VERSION, '<')) {
             $this->create_batch_table();
             $this->create_feedback_table();
             update_option('asae_to_db_version', ASAE_TO_VERSION);
+
+            // Ensure watchdog cron is registered on upgrades (not just fresh activation)
+            if (!wp_next_scheduled('asae_to_batch_watchdog')) {
+                wp_schedule_event(time(), 'asae_to_five_minutes', 'asae_to_batch_watchdog');
+            }
+        }
+
+        // On any admin page load, run the watchdog to catch overdue paused batches
+        $batch_manager = new ASAE_TO_Batch_Manager();
+        $kicked = $batch_manager->watchdog();
+        if ($kicked > 0) {
+            spawn_cron();
         }
     }
 
@@ -718,6 +751,10 @@ class ASAE_Taxonomy_Organizer {
      */
     public function ajax_heartbeat() {
         check_ajax_referer('asae_to_nonce', 'nonce');
+        // Keep cron alive while the user has the page open
+        if (!defined('DOING_CRON') && !wp_doing_cron()) {
+            spawn_cron();
+        }
         wp_send_json_success();
     }
 

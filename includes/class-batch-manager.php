@@ -217,8 +217,68 @@ class ASAE_TO_Batch_Manager {
     }
 
     // =========================================================================
-    // Stall detection
+    // Stall detection & watchdog
     // =========================================================================
+
+    /**
+     * Watchdog: ensure any paused batches whose retry time has passed get
+     * re-scheduled.  Also detects processing stalls.  Called by the recurring
+     * cron event `asae_to_batch_watchdog` (every 5 minutes) and on admin page load.
+     *
+     * @return int Number of batches kicked
+     */
+    public function watchdog() {
+        $kicked = 0;
+        $kicked += $this->requeue_overdue_paused();
+        $kicked += $this->detect_and_requeue_stalled();
+        return $kicked;
+    }
+
+    /**
+     * Find paused batches whose next_retry_at has passed but have no scheduled
+     * cron event (e.g. because WP-Cron never fired while paused).  Re-schedule
+     * them immediately.
+     *
+     * @return int Number of batches requeued
+     */
+    public function requeue_overdue_paused() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'asae_to_batches';
+
+        $now = gmdate('Y-m-d H:i:s');
+
+        $overdue = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE status = 'paused' AND next_retry_at IS NOT NULL AND next_retry_at <= %s",
+            $now
+        ));
+
+        $requeued = 0;
+
+        foreach ($overdue as $batch) {
+            // Only reschedule if no cron event is already pending
+            if (!wp_next_scheduled('asae_to_process_batch', array($batch->batch_id))) {
+                delete_transient('asae_to_lock_' . $batch->batch_id);
+                $this->schedule_batch($batch->batch_id, 5);
+                error_log('ASAE Taxonomy Organizer: Requeued overdue paused batch ' . $batch->batch_id);
+                $requeued++;
+            }
+        }
+
+        // Also requeue pending batches with no cron event
+        $pending = $wpdb->get_results(
+            "SELECT * FROM $table_name WHERE status = 'pending'"
+        );
+
+        foreach ($pending as $batch) {
+            if (!wp_next_scheduled('asae_to_process_batch', array($batch->batch_id))) {
+                $this->schedule_batch($batch->batch_id, 5);
+                error_log('ASAE Taxonomy Organizer: Requeued orphaned pending batch ' . $batch->batch_id);
+                $requeued++;
+            }
+        }
+
+        return $requeued;
+    }
 
     /**
      * Find batches stuck in 'processing' past the stall timeout and requeue
@@ -257,7 +317,7 @@ class ASAE_TO_Batch_Manager {
 }
 
 /**
- * WP-Cron hook handler.
+ * WP-Cron hook handler for batch chunks.
  */
 add_action('asae_to_process_batch', function ($batch_id) {
     if (!preg_match('/^batch_[a-f0-9]+$/', $batch_id)) {
@@ -267,4 +327,17 @@ add_action('asae_to_process_batch', function ($batch_id) {
 
     $processor = new ASAE_TO_Processor();
     $processor->process_batch_chunk($batch_id);
+});
+
+/**
+ * Recurring watchdog: runs every 5 minutes to catch paused batches whose
+ * retry time has passed but whose cron event was never fired (because
+ * WP-Cron only triggers on page loads).
+ */
+add_action('asae_to_batch_watchdog', function () {
+    $batch_manager = new ASAE_TO_Batch_Manager();
+    $kicked = $batch_manager->watchdog();
+    if ($kicked > 0) {
+        spawn_cron();
+    }
 });
