@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.6.0
+Stable tag: 0.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,11 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 0.6.1 =
+* Added real-time diagnostics to batch progress panel: API calls, last activity time, cron status, lock state
+* Status line now shows idle time and reason when batch hasn't progressed (locked, waiting for cron, no cron scheduled)
+* Diagnostics shown as compact monospace footer below progress bar
 
 = 0.6.0 =
 * Fixed batch processing stalling overnight: WP-Cron only fires on page visits, so paused batches with expired retry times were never requeued

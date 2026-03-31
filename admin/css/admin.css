@@ -847,6 +847,13 @@
     background: #dba617;
 }
 
+.asae-to-diagnostics {
+    font-size: 11px;
+    color: #888;
+    margin: 8px 0 4px;
+    font-family: monospace;
+}
+
 .asae-to-paused-label {
     color: #856404;
     font-weight: 600;

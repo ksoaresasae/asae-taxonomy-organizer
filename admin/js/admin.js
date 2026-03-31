@@ -640,9 +640,38 @@
                         );
                         $('#asae-to-progress-panel').addClass('asae-to-panel-paused');
                     } else if (d.status === 'processing' || d.status === 'pending') {
-                        $('#asae-to-phase-label').text('Processing… ' + d.processed_items + ' of ' + d.total_items);
+                        var statusText = 'Processing… ' + d.processed_items + ' of ' + d.total_items;
+                        // If idle too long, show diagnostic hint
+                        if (d.idle_seconds > 120) {
+                            var idleMin = Math.floor(d.idle_seconds / 60);
+                            statusText += ' — idle ' + idleMin + 'min';
+                            if (d.lock_held) {
+                                statusText += ' (locked, waiting for chunk to finish)';
+                            } else if (d.cron_scheduled) {
+                                statusText += ' (next cron in ' + d.cron_due_in + 's)';
+                            } else {
+                                statusText += ' (no cron scheduled — watchdog will requeue)';
+                            }
+                        }
+                        $('#asae-to-phase-label').text(statusText);
                         $('#asae-to-progress-panel').removeClass('asae-to-panel-paused');
                     }
+
+                    // Diagnostics footer
+                    var diag = [];
+                    diag.push('API calls: ' + d.api_calls_made);
+                    if (d.updated_at) {
+                        diag.push('last activity: ' + d.updated_at);
+                    }
+                    if (d.cron_scheduled) {
+                        diag.push('cron: ' + (d.cron_due_in > 0 ? 'due in ' + d.cron_due_in + 's' : 'due now'));
+                    } else if (!d.is_complete) {
+                        diag.push('cron: not scheduled');
+                    }
+                    if (d.lock_held) {
+                        diag.push('lock: held');
+                    }
+                    $('#asae-to-diagnostics').text(diag.join(' · '));
 
                     if (d.is_complete) {
                         var msg = d.status === 'cancelled' ? 'Batch cancelled.' :

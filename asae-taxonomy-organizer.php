@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.6.0
+ * Version: 0.6.1
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.6.0');
+define('ASAE_TO_VERSION', '0.6.1');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -734,6 +734,14 @@ class ASAE_Taxonomy_Organizer {
             wp_send_json_error('Batch not found');
         }
 
+        // Diagnostics: is a cron event scheduled? Is the lock held?
+        $cron_scheduled = wp_next_scheduled('asae_to_process_batch', array($batch->batch_id));
+        $lock_held = (bool) get_transient('asae_to_lock_' . $batch->batch_id);
+
+        // How long since the batch record was last touched?
+        $updated_ts = isset($batch->updated_at) ? strtotime($batch->updated_at) : 0;
+        $idle_seconds = $updated_ts > 0 ? time() - $updated_ts : 0;
+
         wp_send_json_success(array(
             'batch_id'        => $batch->batch_id,
             'status'          => $batch->status,
@@ -743,6 +751,11 @@ class ASAE_Taxonomy_Organizer {
             'next_retry_at'   => isset($batch->next_retry_at) ? $batch->next_retry_at : null,
             'pause_reason'    => isset($batch->pause_reason) ? $batch->pause_reason : null,
             'is_complete'     => in_array($batch->status, array('completed', 'cancelled', 'failed'), true),
+            'updated_at'      => isset($batch->updated_at) ? $batch->updated_at : null,
+            'idle_seconds'    => $idle_seconds,
+            'cron_scheduled'  => $cron_scheduled ? true : false,
+            'cron_due_in'     => $cron_scheduled ? max(0, $cron_scheduled - time()) : null,
+            'lock_held'       => $lock_held,
         ));
     }
 

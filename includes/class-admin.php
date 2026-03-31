@@ -325,6 +325,7 @@ class ASAE_TO_Admin {
                         </div>
                     </div>
                     <p id="asae-to-progress-complete" style="display: none;" class="asae-to-complete-notice"></p>
+                    <p class="asae-to-diagnostics" id="asae-to-diagnostics"></p>
                     <p>
                         <button type="button" id="asae-to-cancel-batch-btn" class="button">
                             <?php _e('Cancel', 'asae-taxonomy-organizer'); ?>
