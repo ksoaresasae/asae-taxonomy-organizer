@@ -1063,6 +1063,26 @@
             $('#use_ai').on('change', this.updateAIStatus);
             $('#reset-usage-btn').on('click', this.resetUsage);
 
+            $('#save-report-settings-btn').on('click', function() {
+                var $btn = $(this);
+                var $result = $('#report-settings-result');
+                $btn.prop('disabled', true);
+                $result.text('Saving…');
+
+                $.post(asaeToAdmin.ajaxUrl, {
+                    action: 'asae_to_save_report_settings',
+                    nonce: asaeToAdmin.nonce,
+                    report_ignored_tags: $('#report_ignored_tags').val()
+                }, function(response) {
+                    $btn.prop('disabled', false);
+                    $result.text(response.success ? response.data.message : 'Failed to save.');
+                    setTimeout(function() { $result.text(''); }, 3000);
+                }).fail(function() {
+                    $btn.prop('disabled', false);
+                    $result.text('Connection error.');
+                });
+            });
+
             $('#check-updates-btn').on('click', function() {
                 var $btn = $(this);
                 var $result = $('#update-check-result');
@@ -1149,8 +1169,7 @@
                     use_ai: $('#use_ai').is(':checked') ? 'yes' : 'no',
                     monthly_api_limit: $('#monthly_api_limit').val(),
                     api_delay: $('#api_delay').val(),
-                    retry_delay: $('#retry_delay').val(),
-                    report_ignored_tags: $('#report_ignored_tags').val()
+                    retry_delay: $('#retry_delay').val()
                 },
                 success: function(response) {
                     $btn.prop('disabled', false);

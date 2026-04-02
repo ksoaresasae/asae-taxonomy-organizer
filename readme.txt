@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,11 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 1.0.5 =
+* Separated report settings save from API settings save — different AJAX handlers
+* Report ignored tags has its own "Save Report Settings" button
+* API key/model/cost settings are never touched when saving report settings
 
 = 1.0.4 =
 * Moved "Save All Settings" button below all settings cards so it's visible near the Ignored Tags field

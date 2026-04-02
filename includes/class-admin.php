@@ -462,10 +462,14 @@ class ASAE_TO_Admin {
                             </tr>
                         </table>
 
-                        <p>
+                        <p class="submit">
                             <button type="button" id="test-connection-btn" class="button">
                                 <?php _e('Test Connection', 'asae-taxonomy-organizer'); ?>
                             </button>
+                            <button type="submit" id="save-settings-btn" class="button button-primary">
+                                <?php _e('Save Settings', 'asae-taxonomy-organizer'); ?>
+                            </button>
+                            <span id="settings-spinner" class="spinner" style="float: none; margin-left: 10px;"></span>
                         </p>
 
                         <div id="connection-result" style="display: none;"></div>
@@ -600,14 +604,13 @@ class ASAE_TO_Admin {
                             </td>
                         </tr>
                     </table>
+                    <p class="submit">
+                        <button type="button" id="save-report-settings-btn" class="button button-primary">
+                            <?php _e('Save Report Settings', 'asae-taxonomy-organizer'); ?>
+                        </button>
+                        <span id="report-settings-result" style="margin-left: 10px;"></span>
+                    </p>
                 </div>
-
-                <p class="submit">
-                    <button type="button" id="save-settings-btn" class="button button-primary">
-                        <?php _e('Save All Settings', 'asae-taxonomy-organizer'); ?>
-                    </button>
-                    <span id="settings-spinner" class="spinner" style="float: none; margin-left: 10px;"></span>
-                </p>
 
                 <div class="asae-to-card">
                     <h2><?php _e('Plugin Updates', 'asae-taxonomy-organizer'); ?></h2>
