@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,13 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 1.0.1 =
+* Tag drill-down title now shows post count: 'Tags in "Category" (1,200 posts)'
+* Fixed tag percentages: now based on posts in category, not total tag assignments
+* Structural tags filtered out: tags appearing on >80% of posts in a category are omitted
+* Tighter table spacing so the data table fits above the fold
+* Report caches cleared on plugin upgrade
 
 = 1.0.0 =
 * New Reports tab — visual donut chart showing content breakdown by category

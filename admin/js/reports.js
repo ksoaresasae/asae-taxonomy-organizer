@@ -108,13 +108,14 @@
         /**
          * Load tag drill-down via AJAX.
          */
-        loadTags: function(termId, categoryName) {
+        loadTags: function(termId, categoryName, catCount) {
             this.currentView = 'tags';
             this.currentCategoryId = termId;
             this.currentCategoryName = categoryName;
             this.showSpinner();
             this.showBackBtn();
-            this.setTitle('Tags in "' + categoryName + '"');
+            var countLabel = catCount ? ' (' + catCount.toLocaleString() + ' posts)' : '';
+            this.setTitle('Tags in "' + categoryName + '"' + countLabel);
 
             $.ajax({
                 url: asaeToReports.ajaxUrl,
@@ -169,7 +170,7 @@
             this.renderChart(labels, counts, colors, function(index) {
                 var tid = termIds[index];
                 if (tid) {
-                    ASAE_TO_Reports.loadTags(tid, labels[index]);
+                    ASAE_TO_Reports.loadTags(tid, labels[index], counts[index]);
                 }
             });
 
@@ -209,11 +210,15 @@
                 return;
             }
 
-            var totalTagged = 0;
-            $.each(counts, function(i, c) { totalTagged += c; });
+            // Use total posts in category as denominator (not sum of tag counts,
+            // since one post can have multiple tags)
+            var totalInCat = data.total_in_category;
 
             this.renderChart(labels, counts, colors, null);
-            this.renderTable(labels, counts, colors, totalTagged, null, false);
+            this.renderTable(labels, counts, colors, totalInCat, null, false);
+
+            var countLabel = totalInCat ? ' (' + totalInCat.toLocaleString() + ' posts)' : '';
+            this.setTitle('Tags in "' + data.category_name + '"' + countLabel);
 
             var summary = 'Donut chart showing top ' + data.tags.length + ' tags in "' +
                 data.category_name + '". ' + data.total_in_category + ' posts in this category.';
@@ -288,7 +293,7 @@
                 html += '<td>';
                 html += '<span class="color-swatch" style="background:' + colors[i] + ';" aria-hidden="true"></span>';
                 if (isDrillable) {
-                    html += '<button type="button" class="drill-btn" data-term-id="' + termIds[i] + '" data-name="' + escapedLabel + '">';
+                    html += '<button type="button" class="drill-btn" data-term-id="' + termIds[i] + '" data-name="' + escapedLabel + '" data-count="' + counts[i] + '">';
                     html += escapedLabel + ' &#9654;';
                     html += '</button>';
                 } else {
@@ -309,7 +314,8 @@
             $wrap.find('.drill-btn').on('click', function() {
                 var tid = $(this).data('term-id');
                 var name = $(this).data('name');
-                ASAE_TO_Reports.loadTags(tid, name);
+                var count = $(this).data('count');
+                ASAE_TO_Reports.loadTags(tid, name, count);
             });
         },
 

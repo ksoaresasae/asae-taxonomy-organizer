@@ -192,7 +192,8 @@ class ASAE_TO_Reports {
         // Count total posts in this category
         $total_in_cat = self::count_posts_in_term($post_type, $taxonomy, $category_term_id);
 
-        // Single SQL query: get top 21 tags for posts in this category
+        // Single SQL query: get all tags for posts in this category
+        // Fetch more than 20 to account for structural tag filtering
         $results = $wpdb->get_results($wpdb->prepare(
             "SELECT t.term_id, t.name, COUNT(DISTINCT p.ID) as cnt
              FROM {$wpdb->term_relationships} tr1
@@ -205,18 +206,26 @@ class ASAE_TO_Reports {
                  AND tt2.taxonomy = 'post_tag'
              JOIN {$wpdb->terms} t ON tt2.term_id = t.term_id
              GROUP BY t.term_id, t.name
-             ORDER BY cnt DESC
-             LIMIT 21",
+             ORDER BY cnt DESC",
             $taxonomy,
             $category_term_id,
             $post_type
         ));
 
+        // Filter out structural tags: those appearing on >80% of posts
+        // in this category are format/source markers, not content tags
+        $threshold = $total_in_cat > 0 ? $total_in_cat * 0.8 : PHP_INT_MAX;
+        $filtered = array();
+        foreach ($results as $row) {
+            if (intval($row->cnt) <= $threshold) {
+                $filtered[] = $row;
+            }
+        }
+
         $tags = array();
-        $top20_count = 0;
         $i = 0;
 
-        foreach ($results as $idx => $row) {
+        foreach ($filtered as $idx => $row) {
             if ($idx >= 20) {
                 break;
             }
@@ -226,17 +235,13 @@ class ASAE_TO_Reports {
                 'count'   => intval($row->cnt),
                 'color'   => self::$palette[$i % count(self::$palette)],
             );
-            $top20_count += intval($row->cnt);
             $i++;
         }
 
-        // If there's a 21st row, calculate "Other"
+        // Remaining tags beyond top 20 go into "Other"
         $other_count = 0;
-        if (count($results) > 20) {
-            // Sum all tags beyond top 20
-            for ($j = 20; $j < count($results); $j++) {
-                $other_count += intval($results[$j]->cnt);
-            }
+        for ($j = 20; $j < count($filtered); $j++) {
+            $other_count += intval($filtered[$j]->cnt);
         }
 
         $data = array(

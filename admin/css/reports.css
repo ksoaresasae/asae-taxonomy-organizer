@@ -70,9 +70,10 @@
 
 .asae-to-report-table th,
 .asae-to-report-table td {
-    padding: 8px 12px;
+    padding: 4px 8px;
     text-align: left;
     border-bottom: 1px solid #eee;
+    line-height: 1.4;
 }
 
 .asae-to-report-table th {
@@ -168,7 +169,7 @@
 
 .asae-to-dashboard-report .asae-to-report-table th,
 .asae-to-dashboard-report .asae-to-report-table td {
-    padding: 5px 8px;
+    padding: 3px 6px;
 }
 
 .asae-to-dash-controls {
