@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 0.7.2
+ * Version: 1.0.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '0.7.2');
+define('ASAE_TO_VERSION', '1.0.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -139,6 +139,9 @@ class ASAE_Taxonomy_Organizer {
         // Rejection feedback logging
         require_once ASAE_TO_PLUGIN_DIR . 'includes/class-feedback-logger.php';
 
+        // Reports data and rendering
+        require_once ASAE_TO_PLUGIN_DIR . 'includes/class-reports.php';
+
         // Self-hosted GitHub updater
         require_once ASAE_TO_PLUGIN_DIR . 'includes/class-github-updater.php';
     }
@@ -181,7 +184,21 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_get_batch_progress', array($this, 'ajax_get_batch_progress'));
         add_action('wp_ajax_asae_to_heartbeat', array($this, 'ajax_heartbeat'));
         add_action('wp_ajax_asae_to_check_updates', array($this, 'ajax_check_updates'));
-        
+
+        // AJAX handlers for Reports
+        add_action('wp_ajax_asae_to_get_report_categories', array($this, 'ajax_get_report_categories'));
+        add_action('wp_ajax_asae_to_get_report_tags', array($this, 'ajax_get_report_tags'));
+
+        // Dashboard widget
+        add_action('wp_dashboard_setup', array($this, 'register_dashboard_widget'));
+
+        // Cache invalidation for reports
+        add_action('save_post', array('ASAE_TO_Reports', 'invalidate_caches'));
+        add_action('delete_post', array('ASAE_TO_Reports', 'invalidate_caches'));
+        add_action('set_object_terms', function($object_id) { ASAE_TO_Reports::invalidate_caches($object_id); });
+        add_action('created_term', function() { ASAE_TO_Reports::invalidate_all_caches(); });
+        add_action('delete_term', function() { ASAE_TO_Reports::invalidate_all_caches(); });
+
         // Self-hosted update checker (GitHub Releases)
         new ASAE_TO_GitHub_Updater();
 
@@ -386,8 +403,39 @@ class ASAE_Taxonomy_Organizer {
      * @param string $hook The current admin page hook
      */
     public function enqueue_admin_assets($hook) {
-        // Only load on our plugin page
-        if ($hook !== $this->organizer_hook) {
+        // Load reports assets on our plugin page and the dashboard
+        $is_plugin_page = ($hook === $this->organizer_hook);
+        $is_dashboard = ($hook === 'index.php');
+
+        if ($is_plugin_page || $is_dashboard) {
+            wp_enqueue_style(
+                'asae-to-reports',
+                ASAE_TO_PLUGIN_URL . 'admin/css/reports.css',
+                array(),
+                ASAE_TO_VERSION
+            );
+            wp_enqueue_script(
+                'asae-to-chartjs',
+                ASAE_TO_PLUGIN_URL . 'admin/js/vendor/chart.min.js',
+                array(),
+                '4.4.7',
+                true
+            );
+            wp_enqueue_script(
+                'asae-to-reports',
+                ASAE_TO_PLUGIN_URL . 'admin/js/reports.js',
+                array('jquery', 'asae-to-chartjs'),
+                ASAE_TO_VERSION,
+                true
+            );
+            wp_localize_script('asae-to-reports', 'asaeToReports', array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('asae_to_nonce'),
+            ));
+        }
+
+        // Only load organizer/settings assets on our plugin page
+        if (!$is_plugin_page) {
             return;
         }
         
@@ -776,6 +824,51 @@ class ASAE_Taxonomy_Organizer {
             'lock_held'       => $lock_held,
             'ran_directly'    => $ran_directly,
         ));
+    }
+
+    /**
+     * Register the dashboard widget.
+     */
+    public function register_dashboard_widget() {
+        wp_add_dashboard_widget(
+            'asae_to_report_widget',
+            __('Content Categories', 'asae-taxonomy-organizer'),
+            array('ASAE_TO_Reports', 'render_dashboard_widget')
+        );
+    }
+
+    /**
+     * AJAX: Get category breakdown for reports.
+     */
+    public function ajax_get_report_categories() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : 'post';
+        $data = ASAE_TO_Reports::get_category_data($post_type);
+        wp_send_json_success($data);
+    }
+
+    /**
+     * AJAX: Get tag breakdown for a category (drill-down).
+     */
+    public function ajax_get_report_tags() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : 'post';
+        $term_id = isset($_POST['category_term_id']) ? intval($_POST['category_term_id']) : 0;
+
+        if ($term_id <= 0) {
+            wp_send_json_error('Invalid category');
+        }
+
+        $data = ASAE_TO_Reports::get_tag_data($post_type, $term_id);
+        wp_send_json_success($data);
     }
 
     /**

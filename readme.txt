@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.7.2
+Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,16 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 1.0.0 =
+* New Reports tab — visual donut chart showing content breakdown by category
+* Click any category to drill down into top 20 tags
+* Dashboard widget with the same chart and drill-down functionality
+* Post type selector to view reports for any content type
+* Accessible data table alongside every chart with keyboard-navigable drill-down
+* Colorblind-safe palette (Wong 2011)
+* AJAX-loaded data with 1-hour transient caching and auto-invalidation
+* Reports is now the default tab (before Organizer and Settings)
 
 = 0.7.2 =
 * HOTFIX: Removed watchdog from admin_init — was blocking every page load with synchronous API calls

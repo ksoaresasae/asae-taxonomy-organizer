@@ -24,7 +24,7 @@ class ASAE_TO_Admin {
      * Render the admin page with tab navigation
      */
     public function render() {
-        $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'organizer';
+        $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'reports';
         $page_slug  = 'asae-taxonomy-organizer';
         ?>
         <div class="wrap asae-to-wrap">
@@ -34,6 +34,11 @@ class ASAE_TO_Admin {
 
             <nav class="nav-tab-wrapper" aria-label="<?php esc_attr_e('Taxonomy Organizer navigation', 'asae-taxonomy-organizer'); ?>">
                 <a href="<?php echo esc_url(admin_url('admin.php?page=' . $page_slug)); ?>"
+                   class="nav-tab <?php echo $active_tab === 'reports' ? 'nav-tab-active' : ''; ?>"
+                   <?php echo $active_tab === 'reports' ? 'aria-current="page"' : ''; ?>>
+                    <?php _e('Reports', 'asae-taxonomy-organizer'); ?>
+                </a>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=' . $page_slug . '&tab=organizer')); ?>"
                    class="nav-tab <?php echo $active_tab === 'organizer' ? 'nav-tab-active' : ''; ?>"
                    <?php echo $active_tab === 'organizer' ? 'aria-current="page"' : ''; ?>>
                     <?php _e('Organizer', 'asae-taxonomy-organizer'); ?>
@@ -46,10 +51,12 @@ class ASAE_TO_Admin {
             </nav>
 
             <?php
-            if ($active_tab === 'settings') {
+            if ($active_tab === 'organizer') {
+                $this->render_organizer_tab();
+            } elseif ($active_tab === 'settings') {
                 $this->render_settings_tab();
             } else {
-                $this->render_organizer_tab();
+                $this->render_reports_tab();
             }
             ?>
 
@@ -58,6 +65,13 @@ class ASAE_TO_Admin {
             </div>
         </div>
         <?php
+    }
+
+    /**
+     * Render the Reports tab content
+     */
+    private function render_reports_tab() {
+        ASAE_TO_Reports::render();
     }
 
     /**

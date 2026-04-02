@@ -1,0 +1,197 @@
+/**
+ * ASAE Taxonomy Organizer - Reports Styles
+ *
+ * @package ASAE_Taxonomy_Organizer
+ * @since 1.0.0
+ */
+
+/* Report header with title and controls */
+.asae-to-report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.asae-to-report-header h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.asae-to-report-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Chart area */
+.asae-to-report-body {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.asae-to-chart-wrap {
+    flex: 0 0 380px;
+    max-width: 380px;
+    position: relative;
+    min-height: 200px;
+}
+
+.asae-to-chart-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}
+
+.asae-to-chart-spinner .spinner {
+    float: none;
+    margin: 0;
+}
+
+/* Data table */
+.asae-to-report-table-wrap {
+    flex: 1;
+    min-width: 250px;
+}
+
+.asae-to-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.asae-to-report-table th,
+.asae-to-report-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.asae-to-report-table th {
+    font-weight: 600;
+    color: #1d2327;
+    background: #f9f9f9;
+}
+
+.asae-to-report-table tbody tr {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.asae-to-report-table tbody tr:hover {
+    background: #f0f6fc;
+}
+
+.asae-to-report-table tbody tr:focus-within {
+    outline: 2px solid #2271b1;
+    outline-offset: -2px;
+}
+
+.asae-to-report-table .count-cell {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.asae-to-report-table .pct-cell {
+    text-align: right;
+    color: #666;
+    font-variant-numeric: tabular-nums;
+}
+
+.asae-to-report-table .color-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+.asae-to-report-table .drill-btn {
+    background: none;
+    border: none;
+    color: #2271b1;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+    text-align: left;
+    display: flex;
+    align-items: center;
+}
+
+.asae-to-report-table .drill-btn:hover {
+    text-decoration: underline;
+}
+
+.asae-to-report-table .drill-btn:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.asae-to-report-table .no-drill {
+    display: flex;
+    align-items: center;
+}
+
+/* Empty state */
+.asae-to-report-empty {
+    text-align: center;
+    color: #666;
+    padding: 40px 20px;
+    font-style: italic;
+}
+
+/* Dashboard widget overrides */
+.asae-to-dashboard-report {
+    position: relative;
+}
+
+.asae-to-dashboard-report .asae-to-chart-spinner {
+    min-height: 100px;
+}
+
+.asae-to-dashboard-report .asae-to-report-table-wrap {
+    margin-top: 12px;
+}
+
+.asae-to-dashboard-report .asae-to-report-table {
+    font-size: 12px;
+}
+
+.asae-to-dashboard-report .asae-to-report-table th,
+.asae-to-dashboard-report .asae-to-report-table td {
+    padding: 5px 8px;
+}
+
+.asae-to-dash-controls {
+    margin-top: 8px;
+    text-align: center;
+}
+
+/* Responsive */
+@media screen and (max-width: 900px) {
+    .asae-to-report-body {
+        flex-direction: column;
+    }
+
+    .asae-to-chart-wrap {
+        flex: none;
+        max-width: 100%;
+        width: 100%;
+    }
+}
+
+@media screen and (max-width: 600px) {
+    .asae-to-report-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
