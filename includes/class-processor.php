@@ -248,7 +248,7 @@ class ASAE_TO_Processor {
                         if (!is_wp_error($result)) {
                             $saved++;
                             if (!empty($tags)) {
-                                $this->resolve_and_assign_tags($post_id, $tags);
+                                $this->resolve_and_assign_tags($post_id, $tags, $term->name);
                             }
                         } else {
                             $failed++;
@@ -381,7 +381,7 @@ class ASAE_TO_Processor {
             if ($analysis && $analysis['confidence'] >= $confidence_threshold) {
                 wp_set_object_terms($post->ID, $analysis['term']->term_id, $batch->taxonomy, false);
                 if (!empty($analysis['tags'])) {
-                    $this->resolve_and_assign_tags($post->ID, $analysis['tags']);
+                    $this->resolve_and_assign_tags($post->ID, $analysis['tags'], $analysis['term']->name);
                 }
             }
 
@@ -493,7 +493,7 @@ class ASAE_TO_Processor {
                     $result['saved']        = !is_wp_error($set_result);
                     $result['needs_review'] = false;
                     if ($result['saved']) {
-                        $this->resolve_and_assign_tags($post->ID, $suggested_tags);
+                        $this->resolve_and_assign_tags($post->ID, $suggested_tags, $analysis['term']->name);
                     }
                     $auto_saved++;
                 } else {
@@ -594,16 +594,108 @@ class ASAE_TO_Processor {
     }
 
     /**
+     * Process one chunk of the redundant tag cleanup.
+     * Removes tags from posts where the tag name matches a category name.
+     *
+     * @param int $offset
+     * @param int $chunk_size
+     * @return array
+     */
+    public function cleanup_redundant_tags_chunk($offset, $chunk_size = 100) {
+        $args = array(
+            'post_type'      => 'any',
+            'post_status'    => 'publish',
+            'posts_per_page' => $chunk_size,
+            'offset'         => $offset,
+            'orderby'        => 'ID',
+            'order'          => 'ASC',
+            'fields'         => 'ids',
+            'tax_query'      => array(
+                'relation' => 'AND',
+                array('taxonomy' => 'category', 'operator' => 'EXISTS'),
+                array('taxonomy' => 'post_tag', 'operator' => 'EXISTS'),
+            ),
+        );
+
+        $query = new WP_Query($args);
+        $post_ids = $query->posts;
+
+        $posts_cleaned = 0;
+        $tags_removed = 0;
+
+        foreach ($post_ids as $post_id) {
+            try {
+                $categories = wp_get_object_terms($post_id, 'category', array('fields' => 'names'));
+                if (is_wp_error($categories) || empty($categories)) {
+                    continue;
+                }
+                $cat_names_lower = array_map('strtolower', $categories);
+
+                $tags = wp_get_object_terms($post_id, 'post_tag');
+                if (is_wp_error($tags) || empty($tags)) {
+                    continue;
+                }
+
+                $redundant_ids = array();
+                foreach ($tags as $tag) {
+                    if (in_array(strtolower($tag->name), $cat_names_lower, true)) {
+                        $redundant_ids[] = $tag->term_id;
+                    }
+                }
+
+                if (!empty($redundant_ids)) {
+                    wp_remove_object_terms($post_id, $redundant_ids, 'post_tag');
+                    $posts_cleaned++;
+                    $tags_removed += count($redundant_ids);
+                }
+            } catch (\Exception $e) {
+                error_log('ASAE Taxonomy Organizer: Cleanup error on post ' . $post_id . ' – ' . $e->getMessage());
+            }
+        }
+
+        return array(
+            'processed'     => count($post_ids),
+            'posts_cleaned' => $posts_cleaned,
+            'tags_removed'  => $tags_removed,
+            'has_more'      => (count($post_ids) === $chunk_size),
+            'offset'        => $offset + count($post_ids),
+        );
+    }
+
+    /**
+     * Count posts that have both categories and tags assigned.
+     *
+     * @return int
+     */
+    public function count_posts_with_categories_and_tags() {
+        $query = new WP_Query(array(
+            'post_type'      => 'any',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'tax_query'      => array(
+                'relation' => 'AND',
+                array('taxonomy' => 'category', 'operator' => 'EXISTS'),
+                array('taxonomy' => 'post_tag', 'operator' => 'EXISTS'),
+            ),
+        ));
+        return $query->found_posts;
+    }
+
+    /**
      * Resolve suggested tag strings against existing tags (fuzzy matching)
      * and assign them to a post. Creates new tags only when no match is found.
      *
-     * @param int   $post_id
-     * @param array $suggested_tags Array of tag name strings
+     * @param int    $post_id
+     * @param array  $suggested_tags    Array of tag name strings
+     * @param string $category_name     Assigned category name (tags matching this are skipped)
      */
-    private function resolve_and_assign_tags($post_id, $suggested_tags) {
+    private function resolve_and_assign_tags($post_id, $suggested_tags, $category_name = '') {
         if (empty($suggested_tags)) {
             return;
         }
+
+        $category_lower = strtolower(trim($category_name));
 
         // Cache existing tags for the batch
         static $existing_tags = null;
@@ -620,8 +712,14 @@ class ASAE_TO_Processor {
                 continue;
             }
 
-            $match = null;
             $tag_lower = strtolower($tag_name);
+
+            // Skip tags that match the assigned category name
+            if ($category_lower && $tag_lower === $category_lower) {
+                continue;
+            }
+
+            $match = null;
             $candidate_slug = sanitize_title($tag_name);
 
             // 1. Exact name match (case-insensitive)

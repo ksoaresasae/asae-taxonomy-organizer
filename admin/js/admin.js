@@ -1063,6 +1063,10 @@
             $('#use_ai').on('change', this.updateAIStatus);
             $('#reset-usage-btn').on('click', this.resetUsage);
 
+            $('#cleanup-redundant-tags-btn').on('click', function() {
+                ASAE_TO.startRedundantTagCleanup();
+            });
+
             $('#save-report-settings-btn').on('click', function() {
                 var $btn = $(this);
                 var $result = $('#report-settings-result');
@@ -1210,6 +1214,100 @@
                         $('.usage-bar-fill').css('width', '0%').removeClass('usage-danger usage-warning').addClass('usage-ok');
                     }
                 }
+            });
+        },
+
+        // =====================================================================
+        // Redundant Tag Cleanup
+        // =====================================================================
+
+        startRedundantTagCleanup: function() {
+            var $btn = $('#cleanup-redundant-tags-btn');
+            var $results = $('#cleanup-results');
+            var $summary = $('#cleanup-summary');
+
+            $btn.prop('disabled', true).text('Scanning…');
+            $summary.hide();
+            $results.hide();
+
+            // First call gets total count
+            $.post(asaeToAdmin.ajaxUrl, {
+                action: 'asae_to_cleanup_redundant_tags',
+                nonce: asaeToAdmin.nonce,
+                offset: 0,
+                chunk_size: 1 // Just get the count without doing much work
+            }, function(response) {
+                if (!response.success) {
+                    $btn.prop('disabled', false).text('Remove Redundant Tags');
+                    $summary.html('<div class="error-message">Failed to scan.</div>').show();
+                    return;
+                }
+
+                var total = response.data.total || 0;
+                if (total === 0) {
+                    $btn.prop('disabled', false).text('Remove Redundant Tags');
+                    $summary.html('<div class="success-message">No posts found with both categories and tags.</div>').show();
+                    return;
+                }
+
+                if (!confirm('Found ' + total.toLocaleString() + ' posts with both categories and tags. Scan and remove redundant tags?')) {
+                    $btn.prop('disabled', false).text('Remove Redundant Tags');
+                    return;
+                }
+
+                $btn.text('Processing…');
+                $results.show();
+                ASAE_TO.processCleanupChunk(0, total, 0, 0);
+            }).fail(function() {
+                $btn.prop('disabled', false).text('Remove Redundant Tags');
+                $summary.html('<div class="error-message">Connection error.</div>').show();
+            });
+        },
+
+        processCleanupChunk: function(offset, total, totalCleaned, totalRemoved) {
+            $.post(asaeToAdmin.ajaxUrl, {
+                action: 'asae_to_cleanup_redundant_tags',
+                nonce: asaeToAdmin.nonce,
+                offset: offset,
+                chunk_size: 100
+            }, function(response) {
+                if (!response.success) {
+                    $('#cleanup-progress-text').text('Error at offset ' + offset + '. Retrying…');
+                    setTimeout(function() {
+                        ASAE_TO.processCleanupChunk(offset, total, totalCleaned, totalRemoved);
+                    }, 2000);
+                    return;
+                }
+
+                var d = response.data;
+                totalCleaned += d.posts_cleaned;
+                totalRemoved += d.tags_removed;
+                var processed = offset + d.processed;
+                var pct = total > 0 ? Math.round((processed / total) * 100) : 100;
+
+                $('#cleanup-progress-fill').css('width', pct + '%');
+                $('.progress-bar').attr('aria-valuenow', pct);
+                $('#cleanup-progress-text').text(
+                    processed.toLocaleString() + ' of ' + total.toLocaleString() + ' posts scanned — ' +
+                    totalRemoved + ' redundant tags removed'
+                );
+
+                if (d.has_more) {
+                    ASAE_TO.processCleanupChunk(d.offset, total, totalCleaned, totalRemoved);
+                } else {
+                    $('#cleanup-results').hide();
+                    $('#cleanup-redundant-tags-btn').prop('disabled', false).text('Remove Redundant Tags');
+                    $('#cleanup-summary').html(
+                        '<div class="success-message">Done. Scanned ' + processed.toLocaleString() +
+                        ' posts. Cleaned ' + totalCleaned.toLocaleString() + ' posts, removed ' +
+                        totalRemoved.toLocaleString() + ' redundant tags.</div>'
+                    ).show();
+                }
+            }).fail(function() {
+                $('#cleanup-progress-text').text('Connection error. Retrying…');
+                setTimeout(function() {
+                    ASAE_TO.processCleanupChunk(offset, total, totalCleaned, totalRemoved);
+                }, 3000);
             });
         },
 

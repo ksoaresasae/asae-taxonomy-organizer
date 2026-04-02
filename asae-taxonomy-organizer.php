@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '1.1.0');
+define('ASAE_TO_VERSION', '1.2.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -185,6 +185,7 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_heartbeat', array($this, 'ajax_heartbeat'));
         add_action('wp_ajax_asae_to_check_updates', array($this, 'ajax_check_updates'));
         add_action('wp_ajax_asae_to_save_report_settings', array($this, 'ajax_save_report_settings'));
+        add_action('wp_ajax_asae_to_cleanup_redundant_tags', array($this, 'ajax_cleanup_redundant_tags'));
 
         // AJAX handlers for Reports
         add_action('wp_ajax_asae_to_get_report_categories', array($this, 'ajax_get_report_categories'));
@@ -845,6 +846,29 @@ class ASAE_Taxonomy_Organizer {
         ASAE_TO_Reports::invalidate_all_caches();
 
         wp_send_json_success(array('message' => __('Report settings saved.', 'asae-taxonomy-organizer')));
+    }
+
+    /**
+     * AJAX: Process one chunk of redundant tag cleanup.
+     */
+    public function ajax_cleanup_redundant_tags() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $offset = isset($_POST['offset']) ? max(0, intval($_POST['offset'])) : 0;
+        $chunk_size = isset($_POST['chunk_size']) ? min(200, max(1, intval($_POST['chunk_size']))) : 100;
+
+        $processor = new ASAE_TO_Processor();
+
+        // On first call, include total count
+        $result = $processor->cleanup_redundant_tags_chunk($offset, $chunk_size);
+        if ($offset === 0) {
+            $result['total'] = $processor->count_posts_with_categories_and_tags();
+        }
+
+        wp_send_json_success($result);
     }
 
     /**

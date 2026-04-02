@@ -613,6 +613,25 @@ class ASAE_TO_Admin {
                 </div>
 
                 <div class="asae-to-card">
+                    <h2><?php _e('Maintenance Tools', 'asae-taxonomy-organizer'); ?></h2>
+                    <p class="description">
+                        <?php _e('Remove tags from posts where the tag name matches one of the post\'s assigned category names. This eliminates redundant tagging (e.g., a post in the "Membership" category also tagged "Membership").', 'asae-taxonomy-organizer'); ?>
+                    </p>
+                    <p>
+                        <button type="button" id="cleanup-redundant-tags-btn" class="button">
+                            <?php _e('Remove Redundant Tags', 'asae-taxonomy-organizer'); ?>
+                        </button>
+                    </p>
+                    <div id="cleanup-results" style="display: none;">
+                        <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="<?php esc_attr_e('Cleanup progress', 'asae-taxonomy-organizer'); ?>">
+                            <div class="progress-fill" id="cleanup-progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="progress-text" id="cleanup-progress-text" role="status" aria-live="polite"></span>
+                    </div>
+                    <div id="cleanup-summary" style="display: none;"></div>
+                </div>
+
+                <div class="asae-to-card">
                     <h2><?php _e('Plugin Updates', 'asae-taxonomy-organizer'); ?></h2>
                     <p class="description">
                         <?php _e('This plugin checks GitHub for new releases automatically. Use the button below to check immediately.', 'asae-taxonomy-organizer'); ?>

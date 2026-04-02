@@ -300,7 +300,8 @@ class ASAE_TO_AI_Analyzer {
 
         $prompt  = "Analyze the following content and:\n";
         $prompt .= "1. Select the single most appropriate category from the list provided.\n";
-        $prompt .= "2. Suggest up to 3 short keyword tags (1-3 words each) that describe the content's key topics. Tags should be general enough to apply across multiple articles.\n\n";
+        $prompt .= "2. Suggest up to 3 short keyword tags (1-3 words each) that describe the content's key topics. Tags should be general enough to apply across multiple articles.\n";
+        $prompt .= "3. Do NOT suggest a tag that matches the selected category name. Tags should add specificity beyond the category.\n\n";
         $prompt .= "Content Title: " . $content['title'] . "\n\n";
         $prompt .= "Content Body:\n" . substr($content['content'], 0, 3000) . "\n\n";
         $prompt .= "Available Categories:\n" . implode("\n", $term_list) . "\n\n";
@@ -320,7 +321,7 @@ class ASAE_TO_AI_Analyzer {
             'body'    => wp_json_encode(array(
                 'model'       => $model,
                 'messages'    => array(
-                    array('role' => 'system', 'content' => 'You are a content categorization and tagging assistant. Analyze content, select the most appropriate category, and suggest up to 3 keyword tags. Always respond in valid JSON format with term_id, confidence, and tags fields. No explanations.'),
+                    array('role' => 'system', 'content' => 'You are a content categorization and tagging assistant. Analyze content, select the most appropriate category, and suggest up to 3 keyword tags. Tags must not duplicate the selected category name. Always respond in valid JSON format with term_id, confidence, and tags fields. No explanations.'),
                     array('role' => 'user', 'content' => $prompt),
                 ),
                 'max_tokens'  => 100,
