@@ -45,6 +45,11 @@ class ASAE_TO_Reports {
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <select id="asae-to-report-date-range" aria-label="<?php esc_attr_e('Date range', 'asae-taxonomy-organizer'); ?>">
+                                <option value="all" selected><?php _e('All Time', 'asae-taxonomy-organizer'); ?></option>
+                                <option value="12m"><?php _e('Last 12 Months', 'asae-taxonomy-organizer'); ?></option>
+                                <option value="3m"><?php _e('Last 3 Months', 'asae-taxonomy-organizer'); ?></option>
+                            </select>
                             <button type="button" id="asae-to-report-back" class="button" style="display: none;">
                                 <?php _e('Back to Categories', 'asae-taxonomy-organizer'); ?>
                             </button>
@@ -76,6 +81,13 @@ class ASAE_TO_Reports {
     public static function render_dashboard_widget() {
         ?>
         <div class="asae-to-dashboard-report" aria-live="polite">
+            <div class="asae-to-dash-top-controls">
+                <select id="asae-to-dash-date-range" aria-label="<?php esc_attr_e('Date range', 'asae-taxonomy-organizer'); ?>">
+                    <option value="all" selected><?php _e('All Time', 'asae-taxonomy-organizer'); ?></option>
+                    <option value="12m"><?php _e('Last 12 Months', 'asae-taxonomy-organizer'); ?></option>
+                    <option value="3m"><?php _e('Last 3 Months', 'asae-taxonomy-organizer'); ?></option>
+                </select>
+            </div>
             <div class="asae-to-chart-spinner" id="asae-to-dash-spinner">
                 <span class="spinner is-active"></span>
             </div>
@@ -97,10 +109,11 @@ class ASAE_TO_Reports {
      * Get category breakdown for a post type.
      *
      * @param string $post_type
+     * @param string $date_range  'all', '3m', or '12m'
      * @return array
      */
-    public static function get_category_data($post_type) {
-        $cache_key = self::transient_key($post_type, 'cats');
+    public static function get_category_data($post_type, $date_range = 'all') {
+        $cache_key = self::transient_key($post_type, 'cats_' . $date_range);
         $cached = get_transient($cache_key);
         if ($cached !== false) {
             return $cached;
@@ -111,7 +124,9 @@ class ASAE_TO_Reports {
             return array('post_type' => $post_type, 'total_posts' => 0, 'categories' => array(), 'uncategorized_count' => 0);
         }
 
-        // Get all terms with counts
+        $date_query = self::build_date_query($date_range);
+
+        // Get all terms
         $terms = get_terms(array(
             'taxonomy'   => $taxonomy,
             'hide_empty' => true,
@@ -121,16 +136,24 @@ class ASAE_TO_Reports {
             $terms = array();
         }
 
-        $total_published = wp_count_posts($post_type);
-        $total = isset($total_published->publish) ? intval($total_published->publish) : 0;
+        // Total published posts (with date filter)
+        $total_args = array(
+            'post_type'      => $post_type,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        );
+        if ($date_query) {
+            $total_args['date_query'] = $date_query;
+        }
+        $total = (new WP_Query($total_args))->found_posts;
 
         $categories = array();
         $categorized_count = 0;
         $i = 0;
 
         foreach ($terms as $term) {
-            // Count posts of this specific post type in this term
-            $count = self::count_posts_in_term($post_type, $taxonomy, $term->term_id);
+            $count = self::count_posts_in_term($post_type, $taxonomy, $term->term_id, $date_range);
             if ($count === 0) {
                 continue;
             }
@@ -174,10 +197,11 @@ class ASAE_TO_Reports {
      *
      * @param string $post_type
      * @param int    $category_term_id
+     * @param string $date_range
      * @return array
      */
-    public static function get_tag_data($post_type, $category_term_id) {
-        $cache_key = self::transient_key($post_type, 'tags', $category_term_id);
+    public static function get_tag_data($post_type, $category_term_id, $date_range = 'all') {
+        $cache_key = self::transient_key($post_type, 'tags_' . $date_range, $category_term_id);
         $cached = get_transient($cache_key);
         if ($cached !== false) {
             return $cached;
@@ -189,18 +213,18 @@ class ASAE_TO_Reports {
         $category = get_term($category_term_id, $taxonomy);
         $category_name = ($category && !is_wp_error($category)) ? $category->name : '';
 
-        // Count total posts in this category
-        $total_in_cat = self::count_posts_in_term($post_type, $taxonomy, $category_term_id);
+        $total_in_cat = self::count_posts_in_term($post_type, $taxonomy, $category_term_id, $date_range);
 
-        // Single SQL query: get all tags for posts in this category
-        // Fetch more than 20 to account for structural tag filtering
+        // Build date WHERE clause for raw SQL
+        $date_where = self::build_date_sql_where($date_range);
+
         $results = $wpdb->get_results($wpdb->prepare(
             "SELECT t.term_id, t.name, COUNT(DISTINCT p.ID) as cnt
              FROM {$wpdb->term_relationships} tr1
              JOIN {$wpdb->term_taxonomy} tt1 ON tr1.term_taxonomy_id = tt1.term_taxonomy_id
                  AND tt1.taxonomy = %s AND tt1.term_id = %d
              JOIN {$wpdb->posts} p ON tr1.object_id = p.ID
-                 AND p.post_type = %s AND p.post_status = 'publish'
+                 AND p.post_type = %s AND p.post_status = 'publish' {$date_where}
              JOIN {$wpdb->term_relationships} tr2 ON p.ID = tr2.object_id
              JOIN {$wpdb->term_taxonomy} tt2 ON tr2.term_taxonomy_id = tt2.term_taxonomy_id
                  AND tt2.taxonomy = 'post_tag'
@@ -212,7 +236,7 @@ class ASAE_TO_Reports {
             $post_type
         ));
 
-        // Filter out ignored tags from settings
+        // Filter out ignored tags
         $ignored_raw = get_option('asae_to_report_ignored_tags', 'article, AssociationsNow, ASAEcenter, podcast, video');
         $ignored_names = array_map(function ($t) {
             return strtolower(trim($t));
@@ -265,10 +289,11 @@ class ASAE_TO_Reports {
      *
      * @param string $post_type
      * @param int    $category_term_id
+     * @param string $date_range
      * @return array
      */
-    public static function get_all_tag_data($post_type, $category_term_id) {
-        $cache_key = self::transient_key($post_type, 'alltags', $category_term_id);
+    public static function get_all_tag_data($post_type, $category_term_id, $date_range = 'all') {
+        $cache_key = self::transient_key($post_type, 'alltags_' . $date_range, $category_term_id);
         $cached = get_transient($cache_key);
         if ($cached !== false) {
             return $cached;
@@ -279,7 +304,9 @@ class ASAE_TO_Reports {
         $taxonomy = self::get_primary_taxonomy($post_type);
         $category = get_term($category_term_id, $taxonomy);
         $category_name = ($category && !is_wp_error($category)) ? $category->name : '';
-        $total_in_cat = self::count_posts_in_term($post_type, $taxonomy, $category_term_id);
+        $total_in_cat = self::count_posts_in_term($post_type, $taxonomy, $category_term_id, $date_range);
+
+        $date_where = self::build_date_sql_where($date_range);
 
         $results = $wpdb->get_results($wpdb->prepare(
             "SELECT t.term_id, t.name, COUNT(DISTINCT p.ID) as cnt
@@ -287,7 +314,7 @@ class ASAE_TO_Reports {
              JOIN {$wpdb->term_taxonomy} tt1 ON tr1.term_taxonomy_id = tt1.term_taxonomy_id
                  AND tt1.taxonomy = %s AND tt1.term_id = %d
              JOIN {$wpdb->posts} p ON tr1.object_id = p.ID
-                 AND p.post_type = %s AND p.post_status = 'publish'
+                 AND p.post_type = %s AND p.post_status = 'publish' {$date_where}
              JOIN {$wpdb->term_relationships} tr2 ON p.ID = tr2.object_id
              JOIN {$wpdb->term_taxonomy} tt2 ON tr2.term_taxonomy_id = tt2.term_taxonomy_id
                  AND tt2.taxonomy = 'post_tag'
@@ -359,19 +386,16 @@ class ASAE_TO_Reports {
     private static function get_primary_taxonomy($post_type) {
         $taxonomies = get_object_taxonomies($post_type, 'objects');
 
-        // Prefer 'category' if available
         if (isset($taxonomies['category'])) {
             return 'category';
         }
 
-        // Otherwise, first hierarchical taxonomy
         foreach ($taxonomies as $tax) {
             if ($tax->hierarchical) {
                 return $tax->name;
             }
         }
 
-        // Fallback: first taxonomy
         foreach ($taxonomies as $tax) {
             return $tax->name;
         }
@@ -382,8 +406,8 @@ class ASAE_TO_Reports {
     /**
      * Count published posts of a specific type in a specific term.
      */
-    private static function count_posts_in_term($post_type, $taxonomy, $term_id) {
-        $query = new WP_Query(array(
+    private static function count_posts_in_term($post_type, $taxonomy, $term_id, $date_range = 'all') {
+        $args = array(
             'post_type'      => $post_type,
             'post_status'    => 'publish',
             'posts_per_page' => -1,
@@ -394,8 +418,49 @@ class ASAE_TO_Reports {
                     'terms'    => $term_id,
                 ),
             ),
-        ));
-        return $query->found_posts;
+        );
+
+        $date_query = self::build_date_query($date_range);
+        if ($date_query) {
+            $args['date_query'] = $date_query;
+        }
+
+        return (new WP_Query($args))->found_posts;
+    }
+
+    /**
+     * Build a WP_Query-compatible date_query array.
+     *
+     * @param string $date_range  'all', '3m', or '12m'
+     * @return array|null
+     */
+    private static function build_date_query($date_range) {
+        if ($date_range === '3m') {
+            return array(array('after' => '3 months ago', 'inclusive' => true));
+        }
+        if ($date_range === '12m') {
+            return array(array('after' => '12 months ago', 'inclusive' => true));
+        }
+        return null;
+    }
+
+    /**
+     * Build a raw SQL WHERE clause fragment for date filtering on wp_posts.
+     * Returns empty string for 'all'.
+     *
+     * @param string $date_range
+     * @return string
+     */
+    private static function build_date_sql_where($date_range) {
+        if ($date_range === '3m') {
+            $date = gmdate('Y-m-d H:i:s', strtotime('-3 months'));
+            return "AND p.post_date >= '{$date}'";
+        }
+        if ($date_range === '12m') {
+            $date = gmdate('Y-m-d H:i:s', strtotime('-12 months'));
+            return "AND p.post_date >= '{$date}'";
+        }
+        return '';
     }
 
     /**
@@ -407,7 +472,7 @@ class ASAE_TO_Reports {
             $key .= '_' . $term_id;
         }
         // Include ignored tags hash so changing the list auto-invalidates cache
-        if ($context === 'tags' || $context === 'alltags') {
+        if (strpos($context, 'tags') !== false || strpos($context, 'alltags') !== false) {
             $ignored = get_option('asae_to_report_ignored_tags', 'article, AssociationsNow, ASAEcenter, podcast, video');
             $key .= '_' . substr(md5($ignored), 0, 8);
         }

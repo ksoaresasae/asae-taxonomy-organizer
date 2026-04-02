@@ -615,7 +615,7 @@ class ASAE_TO_Processor {
         $tag_ids = array();
 
         foreach ($suggested_tags as $tag_name) {
-            $tag_name = trim($tag_name);
+            $tag_name = ucwords(trim($tag_name));
             if (empty($tag_name)) {
                 continue;
             }

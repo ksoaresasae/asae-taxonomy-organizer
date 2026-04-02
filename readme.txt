@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.5
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,18 @@ Preview Mode shows you all suggestions before any changes are saved, allowing yo
 Yes! Select "All Items" to use batch processing, which runs in the background using WordPress's scheduling system. You can monitor progress and cancel anytime.
 
 == Changelog ==
+
+= 1.0.6 =
+* Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.1.0 =
+* Date range filter on all reports: All Time, Last 12 Months, Last 3 Months
+* Available on both the Reports tab and dashboard widget
+* Date range applies to category charts, tag drill-down, and full tag list
+* Tags and categories now display with initial caps (Title Case)
+* New tags created by AI are stored with initial caps
+* Color swatch and name now display inline (no line break)
+* Separate "Save Report Settings" button for ignored tags (independent from API settings)
 
 = 1.0.5 =
 * Separated report settings save from API settings save — different AJAX handlers

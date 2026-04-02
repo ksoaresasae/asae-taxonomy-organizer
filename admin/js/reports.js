@@ -17,6 +17,8 @@
         currentPostType: 'post',
         currentCategoryId: null,
         currentCategoryName: '',
+        currentDateRange: 'all',
+        dateRangeId: null,
         canvasId: null,
         tableWrapId: null,
         spinnerId: null,
@@ -33,15 +35,22 @@
             this.spinnerId = 'asae-to-chart-spinner';
             this.backBtnId = 'asae-to-report-back';
             this.titleId = 'asae-to-report-title';
+            this.dateRangeId = 'asae-to-report-date-range';
             this.isDashboard = false;
 
             var $postType = $('#asae-to-report-post-type');
             if (!$postType.length) return;
 
             this.currentPostType = $postType.val();
+            this.currentDateRange = $('#' + this.dateRangeId).val();
 
             $postType.on('change', function() {
                 ASAE_TO_Reports.currentPostType = $(this).val();
+                ASAE_TO_Reports.loadCategories();
+            });
+
+            $('#' + this.dateRangeId).on('change', function() {
+                ASAE_TO_Reports.currentDateRange = $(this).val();
                 ASAE_TO_Reports.loadCategories();
             });
 
@@ -61,13 +70,20 @@
             this.spinnerId = 'asae-to-dash-spinner';
             this.backBtnId = 'asae-to-dash-back';
             this.titleId = null;
+            this.dateRangeId = 'asae-to-dash-date-range';
             this.isDashboard = true;
             this.currentPostType = 'post';
+            this.currentDateRange = $('#' + this.dateRangeId).val() || 'all';
 
             var $canvas = $('#' + this.canvasId);
             if (!$canvas.length) return;
 
             $('#' + this.backBtnId).on('click', function() {
+                ASAE_TO_Reports.loadCategories();
+            });
+
+            $('#' + this.dateRangeId).on('change', function() {
+                ASAE_TO_Reports.currentDateRange = $(this).val();
                 ASAE_TO_Reports.loadCategories();
             });
 
@@ -90,7 +106,8 @@
                 data: {
                     action: 'asae_to_get_report_categories',
                     nonce: asaeToReports.nonce,
-                    post_type: this.currentPostType
+                    post_type: this.currentPostType,
+                    date_range: this.currentDateRange
                 },
                 success: function(response) {
                     if (!response.success) {
@@ -124,7 +141,8 @@
                     action: 'asae_to_get_report_tags',
                     nonce: asaeToReports.nonce,
                     post_type: this.currentPostType,
-                    category_term_id: termId
+                    category_term_id: termId,
+                    date_range: this.currentDateRange
                 },
                 success: function(response) {
                     if (!response.success) {
@@ -156,7 +174,8 @@
                     action: 'asae_to_get_report_all_tags',
                     nonce: asaeToReports.nonce,
                     post_type: this.currentPostType,
-                    category_term_id: termId
+                    category_term_id: termId,
+                    date_range: this.currentDateRange
                 },
                 success: function(response) {
                     if (!response.success) {
@@ -195,7 +214,7 @@
 
             $.each(data.tags, function(i, tag) {
                 var pct = total > 0 ? Math.round((tag.count / total) * 100) : 0;
-                var escapedName = $('<span>').text(tag.name).html();
+                var escapedName = $('<span>').text(ASAE_TO_Reports.titleCase(tag.name)).html();
                 html += '<tr>';
                 html += '<td class="count-cell">' + (i + 1) + '</td>';
                 html += '<td>' + escapedName + '</td>';
@@ -221,7 +240,7 @@
             var termIds = [];
 
             $.each(data.categories, function(i, cat) {
-                labels.push(cat.name);
+                labels.push(ASAE_TO_Reports.titleCase(cat.name));
                 counts.push(cat.count);
                 colors.push(cat.color);
                 termIds.push(cat.term_id);
@@ -266,7 +285,7 @@
             var colors = [];
 
             $.each(data.tags, function(i, tag) {
-                labels.push(tag.name);
+                labels.push(ASAE_TO_Reports.titleCase(tag.name));
                 counts.push(tag.count);
                 colors.push(tag.color);
             });
@@ -442,6 +461,11 @@
             if (this.titleId) {
                 $('#' + this.titleId).text(text);
             }
+        },
+
+        titleCase: function(str) {
+            if (!str) return '';
+            return str.replace(/\b\w/g, function(c) { return c.toUpperCase(); });
         },
 
         showEmpty: function(message) {

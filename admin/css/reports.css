@@ -124,8 +124,9 @@
     padding: 0;
     font: inherit;
     text-align: left;
-    display: flex;
-    align-items: center;
+    display: inline;
+    vertical-align: middle;
+    text-transform: capitalize;
 }
 
 .asae-to-report-table .drill-btn:hover {
@@ -138,8 +139,9 @@
 }
 
 .asae-to-report-table .no-drill {
-    display: flex;
-    align-items: center;
+    display: inline;
+    vertical-align: middle;
+    text-transform: capitalize;
 }
 
 /* Empty state */
@@ -170,6 +172,10 @@
 .asae-to-dashboard-report .asae-to-report-table th,
 .asae-to-dashboard-report .asae-to-report-table td {
     padding: 3px 6px;
+}
+
+.asae-to-dash-top-controls {
+    margin-bottom: 10px;
 }
 
 .asae-to-dash-controls {

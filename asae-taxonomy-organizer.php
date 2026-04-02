@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 1.0.5
+ * Version: 1.1.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '1.0.5');
+define('ASAE_TO_VERSION', '1.1.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -868,7 +868,8 @@ class ASAE_Taxonomy_Organizer {
         }
 
         $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : 'post';
-        $data = ASAE_TO_Reports::get_category_data($post_type);
+        $date_range = isset($_POST['date_range']) ? sanitize_text_field($_POST['date_range']) : 'all';
+        $data = ASAE_TO_Reports::get_category_data($post_type, $date_range);
         wp_send_json_success($data);
     }
 
@@ -888,7 +889,8 @@ class ASAE_Taxonomy_Organizer {
             wp_send_json_error('Invalid category');
         }
 
-        $data = ASAE_TO_Reports::get_tag_data($post_type, $term_id);
+        $date_range = isset($_POST['date_range']) ? sanitize_text_field($_POST['date_range']) : 'all';
+        $data = ASAE_TO_Reports::get_tag_data($post_type, $term_id, $date_range);
         wp_send_json_success($data);
     }
 
@@ -908,7 +910,8 @@ class ASAE_Taxonomy_Organizer {
             wp_send_json_error('Invalid category');
         }
 
-        $data = ASAE_TO_Reports::get_all_tag_data($post_type, $term_id);
+        $date_range = isset($_POST['date_range']) ? sanitize_text_field($_POST['date_range']) : 'all';
+        $data = ASAE_TO_Reports::get_all_tag_data($post_type, $term_id, $date_range);
         wp_send_json_success($data);
     }
 
