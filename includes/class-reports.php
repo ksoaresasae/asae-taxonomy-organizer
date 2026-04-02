@@ -213,7 +213,7 @@ class ASAE_TO_Reports {
         ));
 
         // Filter out ignored tags from settings
-        $ignored_raw = get_option('asae_to_report_ignored_tags', '');
+        $ignored_raw = get_option('asae_to_report_ignored_tags', 'article, AssociationsNow, ASAEcenter, podcast, video');
         $ignored_names = array_map(function ($t) {
             return strtolower(trim($t));
         }, explode(',', $ignored_raw));
@@ -300,7 +300,7 @@ class ASAE_TO_Reports {
         ));
 
         // Filter out ignored tags
-        $ignored_raw = get_option('asae_to_report_ignored_tags', '');
+        $ignored_raw = get_option('asae_to_report_ignored_tags', 'article, AssociationsNow, ASAEcenter, podcast, video');
         $ignored_names = array_map(function ($t) {
             return strtolower(trim($t));
         }, explode(',', $ignored_raw));
@@ -405,6 +405,11 @@ class ASAE_TO_Reports {
         $key = 'asae_to_report_' . $post_type . '_' . $context;
         if ($term_id !== null) {
             $key .= '_' . $term_id;
+        }
+        // Include ignored tags hash so changing the list auto-invalidates cache
+        if ($context === 'tags' || $context === 'alltags') {
+            $ignored = get_option('asae_to_report_ignored_tags', 'article, AssociationsNow, ASAEcenter, podcast, video');
+            $key .= '_' . substr(md5($ignored), 0, 8);
         }
         return $key;
     }
