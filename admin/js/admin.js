@@ -1149,7 +1149,8 @@
                     use_ai: $('#use_ai').is(':checked') ? 'yes' : 'no',
                     monthly_api_limit: $('#monthly_api_limit').val(),
                     api_delay: $('#api_delay').val(),
-                    retry_delay: $('#retry_delay').val()
+                    retry_delay: $('#retry_delay').val(),
+                    report_ignored_tags: $('#report_ignored_tags').val()
                 },
                 success: function(response) {
                     $btn.prop('disabled', false);

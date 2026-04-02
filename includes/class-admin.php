@@ -587,6 +587,26 @@ class ASAE_TO_Admin {
                 </div>
 
                 <div class="asae-to-card">
+                    <h2><?php _e('Reports', 'asae-taxonomy-organizer'); ?></h2>
+                    <p class="description">
+                        <?php _e('Configure how report charts display tag data.', 'asae-taxonomy-organizer'); ?>
+                    </p>
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="report_ignored_tags"><?php _e('Ignored Tags', 'asae-taxonomy-organizer'); ?></label>
+                            </th>
+                            <td>
+                                <textarea name="report_ignored_tags" id="report_ignored_tags" rows="3" class="large-text"><?php echo esc_textarea(get_option('asae_to_report_ignored_tags', 'article, AssociationsNow, ASAEcenter, podcast, video')); ?></textarea>
+                                <p class="description">
+                                    <?php _e('Comma-separated list of tag names to exclude from report charts. These are typically structural or format tags, not content topics.', 'asae-taxonomy-organizer'); ?>
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="asae-to-card">
                     <h2><?php _e('Plugin Updates', 'asae-taxonomy-organizer'); ?></h2>
                     <p class="description">
                         <?php _e('This plugin checks GitHub for new releases automatically. Use the button below to check immediately.', 'asae-taxonomy-organizer'); ?>

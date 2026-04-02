@@ -140,6 +140,78 @@
         },
 
         /**
+         * Load ALL tags for a category (full list, no chart).
+         */
+        loadAllTags: function(termId, categoryName, catCount) {
+            this.currentView = 'alltags';
+            this.showSpinner();
+            this.showBackBtn();
+            var countLabel = catCount ? ' (' + catCount.toLocaleString() + ' posts)' : '';
+            this.setTitle('All Tags in "' + categoryName + '"' + countLabel);
+
+            $.ajax({
+                url: asaeToReports.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'asae_to_get_report_all_tags',
+                    nonce: asaeToReports.nonce,
+                    post_type: this.currentPostType,
+                    category_term_id: termId
+                },
+                success: function(response) {
+                    if (!response.success) {
+                        ASAE_TO_Reports.showEmpty('Failed to load tag data.');
+                        return;
+                    }
+                    ASAE_TO_Reports.renderFullList(response.data);
+                },
+                error: function() {
+                    ASAE_TO_Reports.showEmpty('Connection error loading tags.');
+                }
+            });
+        },
+
+        /**
+         * Render a full tag list (no chart, just a table).
+         */
+        renderFullList: function(data) {
+            this.hideSpinner();
+            // Hide the chart canvas
+            $('#' + this.canvasId).hide();
+            if (this.chart) {
+                this.chart.destroy();
+                this.chart = null;
+            }
+
+            if (data.tags.length === 0) {
+                this.showEmpty('No tags found for posts in this category.');
+                return;
+            }
+
+            var total = data.total_in_category;
+            var html = '<table class="asae-to-report-table" role="table">';
+            html += '<thead><tr><th scope="col">#</th><th scope="col">Tag</th><th scope="col" class="count-cell">Count</th><th scope="col" class="pct-cell">%</th></tr></thead>';
+            html += '<tbody>';
+
+            $.each(data.tags, function(i, tag) {
+                var pct = total > 0 ? Math.round((tag.count / total) * 100) : 0;
+                var escapedName = $('<span>').text(tag.name).html();
+                html += '<tr>';
+                html += '<td class="count-cell">' + (i + 1) + '</td>';
+                html += '<td>' + escapedName + '</td>';
+                html += '<td class="count-cell">' + tag.count.toLocaleString() + '</td>';
+                html += '<td class="pct-cell">' + pct + '%</td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            html += '<p style="color:#666; font-size:12px; margin-top:8px;">' +
+                data.tags.length + ' tags total (excluding ignored tags)</p>';
+
+            $('#' + this.tableWrapId).html(html);
+        },
+
+        /**
          * Render category donut chart + data table.
          */
         renderCategoryChart: function(data) {
@@ -214,8 +286,14 @@
             // since one post can have multiple tags)
             var totalInCat = data.total_in_category;
 
-            this.renderChart(labels, counts, colors, null);
-            this.renderTable(labels, counts, colors, totalInCat, null, false);
+            var self = this;
+            this.renderChart(labels, counts, colors, function(index) {
+                // Click "Other" slice to see full list
+                if (labels[index] === 'Other') {
+                    self.loadAllTags(self.currentCategoryId, data.category_name, data.total_in_category);
+                }
+            });
+            this.renderTable(labels, counts, colors, totalInCat, null, false, data.other_count > 0);
 
             var countLabel = totalInCat ? ' (' + totalInCat.toLocaleString() + ' posts)' : '';
             this.setTitle('Tags in "' + data.category_name + '"' + countLabel);
@@ -279,7 +357,7 @@
         /**
          * Render the accessible data table.
          */
-        renderTable: function(labels, counts, colors, total, termIds, drillable) {
+        renderTable: function(labels, counts, colors, total, termIds, drillable, hasOtherDrill) {
             var html = '<table class="asae-to-report-table" role="table">';
             html += '<thead><tr><th scope="col">Name</th><th scope="col" class="count-cell">Count</th><th scope="col" class="pct-cell">%</th></tr></thead>';
             html += '<tbody>';
@@ -296,6 +374,10 @@
                     html += '<button type="button" class="drill-btn" data-term-id="' + termIds[i] + '" data-name="' + escapedLabel + '" data-count="' + counts[i] + '">';
                     html += escapedLabel + ' &#9654;';
                     html += '</button>';
+                } else if (hasOtherDrill && label === 'Other') {
+                    html += '<button type="button" class="drill-btn other-drill-btn">';
+                    html += escapedLabel + ' (view all) &#9654;';
+                    html += '</button>';
                 } else {
                     html += '<span class="no-drill">' + escapedLabel + '</span>';
                 }
@@ -311,11 +393,20 @@
             $wrap.html(html);
 
             // Bind drill-down clicks on table buttons
-            $wrap.find('.drill-btn').on('click', function() {
+            $wrap.find('.drill-btn').not('.other-drill-btn').on('click', function() {
                 var tid = $(this).data('term-id');
                 var name = $(this).data('name');
                 var count = $(this).data('count');
                 ASAE_TO_Reports.loadTags(tid, name, count);
+            });
+
+            // Bind "Other" drill to full list
+            $wrap.find('.other-drill-btn').on('click', function() {
+                ASAE_TO_Reports.loadAllTags(
+                    ASAE_TO_Reports.currentCategoryId,
+                    ASAE_TO_Reports.currentCategoryName,
+                    total
+                );
             });
         },
 

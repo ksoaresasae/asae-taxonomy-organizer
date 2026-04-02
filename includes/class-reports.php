@@ -212,12 +212,16 @@ class ASAE_TO_Reports {
             $post_type
         ));
 
-        // Filter out structural tags: those appearing on >80% of posts
-        // in this category are format/source markers, not content tags
-        $threshold = $total_in_cat > 0 ? $total_in_cat * 0.8 : PHP_INT_MAX;
+        // Filter out ignored tags from settings
+        $ignored_raw = get_option('asae_to_report_ignored_tags', '');
+        $ignored_names = array_map(function ($t) {
+            return strtolower(trim($t));
+        }, explode(',', $ignored_raw));
+        $ignored_names = array_filter($ignored_names);
+
         $filtered = array();
         foreach ($results as $row) {
-            if (intval($row->cnt) <= $threshold) {
+            if (!in_array(strtolower($row->name), $ignored_names, true)) {
                 $filtered[] = $row;
             }
         }
@@ -250,6 +254,75 @@ class ASAE_TO_Reports {
             'total_in_category' => $total_in_cat,
             'tags'             => $tags,
             'other_count'      => $other_count,
+        );
+
+        set_transient($cache_key, $data, HOUR_IN_SECONDS);
+        return $data;
+    }
+
+    /**
+     * Get ALL tags for posts in a category (no limit), for the full list view.
+     *
+     * @param string $post_type
+     * @param int    $category_term_id
+     * @return array
+     */
+    public static function get_all_tag_data($post_type, $category_term_id) {
+        $cache_key = self::transient_key($post_type, 'alltags', $category_term_id);
+        $cached = get_transient($cache_key);
+        if ($cached !== false) {
+            return $cached;
+        }
+
+        global $wpdb;
+
+        $taxonomy = self::get_primary_taxonomy($post_type);
+        $category = get_term($category_term_id, $taxonomy);
+        $category_name = ($category && !is_wp_error($category)) ? $category->name : '';
+        $total_in_cat = self::count_posts_in_term($post_type, $taxonomy, $category_term_id);
+
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT t.term_id, t.name, COUNT(DISTINCT p.ID) as cnt
+             FROM {$wpdb->term_relationships} tr1
+             JOIN {$wpdb->term_taxonomy} tt1 ON tr1.term_taxonomy_id = tt1.term_taxonomy_id
+                 AND tt1.taxonomy = %s AND tt1.term_id = %d
+             JOIN {$wpdb->posts} p ON tr1.object_id = p.ID
+                 AND p.post_type = %s AND p.post_status = 'publish'
+             JOIN {$wpdb->term_relationships} tr2 ON p.ID = tr2.object_id
+             JOIN {$wpdb->term_taxonomy} tt2 ON tr2.term_taxonomy_id = tt2.term_taxonomy_id
+                 AND tt2.taxonomy = 'post_tag'
+             JOIN {$wpdb->terms} t ON tt2.term_id = t.term_id
+             GROUP BY t.term_id, t.name
+             ORDER BY cnt DESC",
+            $taxonomy,
+            $category_term_id,
+            $post_type
+        ));
+
+        // Filter out ignored tags
+        $ignored_raw = get_option('asae_to_report_ignored_tags', '');
+        $ignored_names = array_map(function ($t) {
+            return strtolower(trim($t));
+        }, explode(',', $ignored_raw));
+        $ignored_names = array_filter($ignored_names);
+
+        $tags = array();
+        foreach ($results as $row) {
+            if (in_array(strtolower($row->name), $ignored_names, true)) {
+                continue;
+            }
+            $tags[] = array(
+                'term_id' => intval($row->term_id),
+                'name'    => $row->name,
+                'count'   => intval($row->cnt),
+            );
+        }
+
+        $data = array(
+            'category_name'     => $category_name,
+            'category_term_id'  => $category_term_id,
+            'total_in_category' => $total_in_cat,
+            'tags'              => $tags,
         );
 
         set_transient($cache_key, $data, HOUR_IN_SECONDS);

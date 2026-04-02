@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '1.0.1');
+define('ASAE_TO_VERSION', '1.0.2');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -188,6 +188,7 @@ class ASAE_Taxonomy_Organizer {
         // AJAX handlers for Reports
         add_action('wp_ajax_asae_to_get_report_categories', array($this, 'ajax_get_report_categories'));
         add_action('wp_ajax_asae_to_get_report_tags', array($this, 'ajax_get_report_tags'));
+        add_action('wp_ajax_asae_to_get_report_all_tags', array($this, 'ajax_get_report_all_tags'));
 
         // Dashboard widget
         add_action('wp_dashboard_setup', array($this, 'register_dashboard_widget'));
@@ -875,6 +876,26 @@ class ASAE_Taxonomy_Organizer {
     }
 
     /**
+     * AJAX: Get ALL tags for a category (no limit, for the "Other" drill-down).
+     */
+    public function ajax_get_report_all_tags() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : 'post';
+        $term_id = isset($_POST['category_term_id']) ? intval($_POST['category_term_id']) : 0;
+
+        if ($term_id <= 0) {
+            wp_send_json_error('Invalid category');
+        }
+
+        $data = ASAE_TO_Reports::get_all_tag_data($post_type, $term_id);
+        wp_send_json_success($data);
+    }
+
+    /**
      * AJAX: Lightweight heartbeat to keep the browser tab alive during processing.
      */
     public function ajax_heartbeat() {
@@ -953,6 +974,9 @@ class ASAE_Taxonomy_Organizer {
         $api_delay     = isset($_POST['api_delay']) ? max(0, min(5000, intval($_POST['api_delay']))) : 200;
         $retry_delay   = isset($_POST['retry_delay']) ? max(1, min(1440, intval($_POST['retry_delay']))) : 60;
 
+        // Report settings
+        $ignored_tags = isset($_POST['report_ignored_tags']) ? sanitize_textarea_field($_POST['report_ignored_tags']) : '';
+
         // Save settings
         update_option('asae_to_openai_api_key', $api_key);
         update_option('asae_to_openai_model', $model);
@@ -960,6 +984,10 @@ class ASAE_Taxonomy_Organizer {
         update_option('asae_to_monthly_api_call_limit', $monthly_limit);
         update_option('asae_to_api_call_delay_ms', $api_delay);
         update_option('asae_to_api_retry_delay_minutes', $retry_delay);
+        update_option('asae_to_report_ignored_tags', $ignored_tags);
+
+        // Clear report caches when ignored tags change
+        ASAE_TO_Reports::invalidate_all_caches();
         
         wp_send_json(array(
             'success' => true,
