@@ -73,7 +73,7 @@
             this.dateRangeId = 'asae-to-dash-date-range';
             this.isDashboard = true;
             this.currentPostType = 'post';
-            this.currentDateRange = $('#' + this.dateRangeId).val() || 'all';
+            this.currentDateRange = $('#' + this.dateRangeId).val() || '3m';
 
             var $canvas = $('#' + this.canvasId);
             if (!$canvas.length) return;

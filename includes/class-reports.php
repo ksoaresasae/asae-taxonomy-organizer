@@ -83,9 +83,9 @@ class ASAE_TO_Reports {
         <div class="asae-to-dashboard-report" aria-live="polite">
             <div class="asae-to-dash-top-controls">
                 <select id="asae-to-dash-date-range" aria-label="<?php esc_attr_e('Date range', 'asae-taxonomy-organizer'); ?>">
-                    <option value="all" selected><?php _e('All Time', 'asae-taxonomy-organizer'); ?></option>
+                    <option value="3m" selected><?php _e('Last 3 Months', 'asae-taxonomy-organizer'); ?></option>
                     <option value="12m"><?php _e('Last 12 Months', 'asae-taxonomy-organizer'); ?></option>
-                    <option value="3m"><?php _e('Last 3 Months', 'asae-taxonomy-organizer'); ?></option>
+                    <option value="all"><?php _e('All Time', 'asae-taxonomy-organizer'); ?></option>
                 </select>
             </div>
             <div class="asae-to-chart-spinner" id="asae-to-dash-spinner">
@@ -101,6 +101,11 @@ class ASAE_TO_Reports {
                     <?php _e('Back to Categories', 'asae-taxonomy-organizer'); ?>
                 </button>
             </div>
+            <p class="asae-to-dash-full-link">
+                <a href="<?php echo esc_url(admin_url('admin.php?page=asae-taxonomy-organizer')); ?>">
+                    <?php _e('View Full Reports', 'asae-taxonomy-organizer'); ?> &rarr;
+                </a>
+            </p>
         </div>
         <?php
     }

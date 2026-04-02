@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,10 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 
 = 1.0.6 =
 * Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.2.1 =
+* Dashboard widget defaults to Last 3 Months instead of All Time
+* Added "View Full Reports" link at the bottom of the dashboard widget
 
 = 1.2.0 =
 * Tags matching the assigned category name are now skipped during processing
