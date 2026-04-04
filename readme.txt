@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.3.4
+Stable tag: 1.3.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,12 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 
 = 1.0.6 =
 * Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.3.5 =
+* Added visible error messages when chart data or Chart.js fails
+* Shows "Chart.js library not loaded" if Chart global is undefined
+* Shows AJAX error details and chart render exceptions inline
+* Debugging: check what message appears on the Reports tab
 
 = 1.3.4 =
 * GA4 chart now loads on button click only (not auto) to isolate from Content by Category chart

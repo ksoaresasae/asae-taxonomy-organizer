@@ -111,13 +111,18 @@
                 },
                 success: function(response) {
                     if (!response.success) {
-                        ASAE_TO_Reports.showEmpty('Failed to load report data.');
+                        ASAE_TO_Reports.showEmpty('Failed to load report data: ' + JSON.stringify(response.data));
                         return;
                     }
-                    ASAE_TO_Reports.renderCategoryChart(response.data);
+                    try {
+                        ASAE_TO_Reports.renderCategoryChart(response.data);
+                    } catch(e) {
+                        ASAE_TO_Reports.showEmpty('Chart render error: ' + e.message);
+                        console.error('ASAE_TO chart error:', e);
+                    }
                 },
-                error: function() {
-                    ASAE_TO_Reports.showEmpty('Connection error loading report.');
+                error: function(xhr, status, err) {
+                    ASAE_TO_Reports.showEmpty('Connection error: ' + status + ' ' + err);
                 }
             });
         },
@@ -327,6 +332,12 @@
          */
         renderChart: function(labels, counts, colors, onClickFn) {
             this.hideSpinner();
+
+            if (typeof Chart === 'undefined') {
+                this.showEmpty('Chart.js library not loaded. Check browser console for errors.');
+                return;
+            }
+
             var $canvas = $('#' + this.canvasId);
             $canvas.show();
 
