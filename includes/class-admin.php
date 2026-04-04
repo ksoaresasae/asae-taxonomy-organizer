@@ -72,6 +72,62 @@ class ASAE_TO_Admin {
      */
     private function render_reports_tab() {
         ASAE_TO_Reports::render();
+        $this->render_ga4_views_chart();
+    }
+
+    /**
+     * Render the GA4 pageviews by category chart section.
+     */
+    private function render_ga4_views_chart() {
+        $ga4_configured = !empty(get_option('ato_ga4_property_id', '')) && !empty(get_option('ato_ga4_service_account_json', ''));
+        ?>
+        <div class="asae-to-container" style="margin-top: 20px;">
+            <div class="asae-to-main">
+                <div class="asae-to-card">
+                    <div class="asae-to-report-header">
+                        <h2 id="asae-to-ga4-title"><?php _e('Pageviews by Category', 'asae-taxonomy-organizer'); ?></h2>
+                        <?php if ($ga4_configured): ?>
+                        <div class="asae-to-report-controls">
+                            <select id="asae-to-ga4-window" aria-label="<?php esc_attr_e('Time window', 'asae-taxonomy-organizer'); ?>">
+                                <option value="3mo" selected><?php _e('Last 3 Months', 'asae-taxonomy-organizer'); ?></option>
+                                <option value="12mo"><?php _e('Last 12 Months', 'asae-taxonomy-organizer'); ?></option>
+                                <option value="all"><?php _e('All Time', 'asae-taxonomy-organizer'); ?></option>
+                            </select>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if (!$ga4_configured): ?>
+                        <div class="asae-to-report-empty">
+                            <?php printf(
+                                __('GA4 credentials are not configured. <a href="%s">Set up GA4</a> on the Settings tab to enable this report.', 'asae-taxonomy-organizer'),
+                                esc_url(admin_url('admin.php?page=asae-taxonomy-organizer&tab=settings#ga4-settings'))
+                            ); ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="asae-to-report-body" aria-live="polite">
+                            <div id="asae-to-ga4-spinner" class="asae-to-chart-spinner">
+                                <span class="spinner is-active"></span>
+                            </div>
+                            <canvas id="asae-to-ga4-chart"
+                                    role="img"
+                                    aria-label="<?php esc_attr_e('Pageviews by category chart', 'asae-taxonomy-organizer'); ?>"
+                                    style="display: none;"></canvas>
+                            <div id="asae-to-ga4-table-wrap" class="asae-to-report-table-wrap"></div>
+                        </div>
+                        <p id="asae-to-ga4-footer" class="description" style="display: none; margin-top: 10px; font-size: 11px; color: #888;">
+                            <?php _e('Posts assigned to multiple categories are counted in each. Data refreshed daily from Google Analytics 4.', 'asae-taxonomy-organizer'); ?>
+                            <span id="asae-to-ga4-updated"></span>
+                        </p>
+                        <div id="asae-to-ga4-error" style="display: none;">
+                            <p class="error-message" id="asae-to-ga4-error-msg"></p>
+                            <button type="button" id="asae-to-ga4-retry" class="button button-small"><?php _e('Retry', 'asae-taxonomy-organizer'); ?></button>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <?php
     }
 
     /**
@@ -609,6 +665,77 @@ class ASAE_TO_Admin {
                             <?php _e('Save Report Settings', 'asae-taxonomy-organizer'); ?>
                         </button>
                         <span id="report-settings-result" style="margin-left: 10px;"></span>
+                    </p>
+                </div>
+
+                <div class="asae-to-card" id="ga4-settings">
+                    <h2><?php _e('Google Analytics 4 Configuration', 'asae-taxonomy-organizer'); ?></h2>
+                    <p class="description">
+                        <?php _e('Configure GA4 access for the Pageviews by Category report. Requires a Google service account with Viewer access to the GA4 property.', 'asae-taxonomy-organizer'); ?>
+                    </p>
+                    <?php
+                    $ga4_property = get_option('ato_ga4_property_id', '');
+                    $ga4_has_creds = !empty(get_option('ato_ga4_service_account_json', ''));
+                    $ga4_client_email = get_option('ato_ga4_client_email', '');
+
+                    // Auto-detect from Site Kit if not yet configured
+                    $sitekit_detected = '';
+                    if (empty($ga4_property)) {
+                        $sitekit_options = get_option('googlesitekit_analytics-4', array());
+                        if (!empty($sitekit_options['propertyID'])) {
+                            $sitekit_detected = $sitekit_options['propertyID'];
+                        }
+                    }
+                    ?>
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="ga4_property_id"><?php _e('GA4 Property ID', 'asae-taxonomy-organizer'); ?></label>
+                            </th>
+                            <td>
+                                <input type="text" id="ga4_property_id" class="regular-text"
+                                       value="<?php echo esc_attr($ga4_property ?: $sitekit_detected); ?>"
+                                       placeholder="properties/123456789">
+                                <p class="description">
+                                    <?php _e('The GA4 property ID (e.g., properties/123456789).', 'asae-taxonomy-organizer'); ?>
+                                    <?php if ($sitekit_detected && empty($ga4_property)): ?>
+                                        <br><em><?php _e('Auto-detected from Google Site Kit.', 'asae-taxonomy-organizer'); ?></em>
+                                    <?php endif; ?>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="ga4_service_account_json"><?php _e('Service Account JSON Key', 'asae-taxonomy-organizer'); ?></label>
+                            </th>
+                            <td>
+                                <?php if ($ga4_has_creds && $ga4_client_email): ?>
+                                    <div id="ga4-creds-status">
+                                        <span class="status-active"><?php echo esc_html(sprintf(__('Service account configured: %s', 'asae-taxonomy-organizer'), $ga4_client_email)); ?></span>
+                                        <button type="button" id="ga4-replace-creds-btn" class="button button-small" style="margin-left: 8px;">
+                                            <?php _e('Replace', 'asae-taxonomy-organizer'); ?>
+                                        </button>
+                                    </div>
+                                <?php endif; ?>
+                                <div id="ga4-creds-input" <?php echo ($ga4_has_creds && $ga4_client_email) ? 'style="display:none;"' : ''; ?>>
+                                    <textarea id="ga4_service_account_json" rows="8" class="large-text" style="font-family: monospace; font-size: 12px;"
+                                              placeholder="<?php esc_attr_e('Paste the full contents of your Google service account JSON key file here...', 'asae-taxonomy-organizer'); ?>"></textarea>
+                                </div>
+                                <p class="description">
+                                    <?php _e('The service account must have Viewer access to the GA4 property above.', 'asae-taxonomy-organizer'); ?>
+                                </p>
+                                <div id="ga4-creds-error" style="display: none;" class="error-message"></div>
+                            </td>
+                        </tr>
+                    </table>
+                    <p class="submit">
+                        <button type="button" id="save-ga4-settings-btn" class="button button-primary">
+                            <?php _e('Save GA4 Settings', 'asae-taxonomy-organizer'); ?>
+                        </button>
+                        <button type="button" id="test-ga4-btn" class="button">
+                            <?php _e('Test Connection', 'asae-taxonomy-organizer'); ?>
+                        </button>
+                        <span id="ga4-settings-result" style="margin-left: 10px;"></span>
                     </p>
                 </div>
 

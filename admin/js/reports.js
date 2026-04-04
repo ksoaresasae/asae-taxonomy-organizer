@@ -477,6 +477,162 @@
         }
     };
 
+    // =====================================================================
+    // GA4 Pageviews by Category Chart
+    // =====================================================================
+
+    var ASAE_TO_GA4 = {
+        chart: null,
+        currentWindow: '3mo',
+
+        init: function() {
+            var $canvas = $('#asae-to-ga4-chart');
+            if (!$canvas.length) return;
+
+            var $window = $('#asae-to-ga4-window');
+            this.currentWindow = $window.val();
+
+            $window.on('change', function() {
+                ASAE_TO_GA4.currentWindow = $(this).val();
+                ASAE_TO_GA4.loadData();
+            });
+
+            $('#asae-to-ga4-retry').on('click', function() {
+                ASAE_TO_GA4.loadData();
+            });
+
+            this.loadData();
+        },
+
+        loadData: function() {
+            $('#asae-to-ga4-spinner').show();
+            $('#asae-to-ga4-chart').hide();
+            $('#asae-to-ga4-table-wrap').empty();
+            $('#asae-to-ga4-footer').hide();
+            $('#asae-to-ga4-error').hide();
+
+            $.ajax({
+                url: asaeToReports.restUrl + 'reports/category-views',
+                method: 'GET',
+                data: { window: this.currentWindow },
+                beforeSend: function(xhr) {
+                    xhr.setRequestHeader('X-WP-Nonce', asaeToReports.restNonce);
+                },
+                success: function(data) {
+                    ASAE_TO_GA4.renderChart(data);
+                },
+                error: function(xhr) {
+                    $('#asae-to-ga4-spinner').hide();
+                    var msg = 'Failed to load GA4 data.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        msg = xhr.responseJSON.message;
+                    }
+                    $('#asae-to-ga4-error-msg').text(msg);
+                    $('#asae-to-ga4-error').show();
+                }
+            });
+        },
+
+        renderChart: function(data) {
+            $('#asae-to-ga4-spinner').hide();
+            var $canvas = $('#asae-to-ga4-chart');
+
+            if (!data.categories || data.categories.length === 0) {
+                $('#asae-to-ga4-table-wrap').html(
+                    '<p class="asae-to-report-empty">No pageview data available for this time period.</p>'
+                );
+                return;
+            }
+
+            $canvas.show();
+
+            var labels = [];
+            var views = [];
+            var colors = [];
+
+            $.each(data.categories, function(i, cat) {
+                labels.push(ASAE_TO_Reports.titleCase(cat.name));
+                views.push(cat.views);
+                colors.push(cat.color);
+            });
+
+            if (ASAE_TO_GA4.chart) {
+                ASAE_TO_GA4.chart.destroy();
+            }
+
+            var ctx = $canvas[0].getContext('2d');
+            ASAE_TO_GA4.chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: views,
+                        backgroundColor: colors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    return ctx.parsed.x.toLocaleString() + ' views';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                callback: function(val) {
+                                    return val.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Set canvas height based on category count
+            var barHeight = 32;
+            var minHeight = 300;
+            $canvas.css('height', Math.max(minHeight, labels.length * barHeight) + 'px');
+
+            // Data table
+            var html = '<table class="asae-to-report-table" role="table">';
+            html += '<thead><tr><th scope="col">Category</th><th scope="col" class="count-cell">Views</th><th scope="col" class="pct-cell">%</th></tr></thead>';
+            html += '<tbody>';
+
+            var total = data.total_views;
+            $.each(data.categories, function(i, cat) {
+                var pct = total > 0 ? Math.round((cat.views / total) * 100) : 0;
+                html += '<tr>';
+                html += '<td><span class="color-swatch" style="background:' + cat.color + ';" aria-hidden="true"></span>';
+                html += '<span class="no-drill" style="text-transform:capitalize;">' + $('<span>').text(cat.name).html() + '</span></td>';
+                html += '<td class="count-cell">' + cat.views.toLocaleString() + '</td>';
+                html += '<td class="pct-cell">' + pct + '%</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            $('#asae-to-ga4-table-wrap').html(html);
+
+            // Footer
+            $('#asae-to-ga4-updated').text(' Last updated: ' + data.generated_at);
+            $('#asae-to-ga4-footer').show();
+
+            // Aria label
+            var summary = 'Horizontal bar chart showing pageviews across ' + labels.length + ' categories.';
+            if (labels.length > 0) {
+                summary += ' Highest: ' + labels[0] + ' with ' + views[0].toLocaleString() + ' views.';
+            }
+            $canvas.attr('aria-label', summary);
+        }
+    };
+
     // Initialize on DOM ready
     $(function() {
         // Reports tab (plugin page)
@@ -487,6 +643,11 @@
         // Dashboard widget
         if ($('#asae-to-dash-chart').length) {
             ASAE_TO_Reports.initDashboard();
+        }
+
+        // GA4 pageviews chart
+        if ($('#asae-to-ga4-chart').length) {
+            ASAE_TO_GA4.init();
         }
     });
 

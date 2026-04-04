@@ -1063,6 +1063,65 @@
             $('#use_ai').on('change', this.updateAIStatus);
             $('#reset-usage-btn').on('click', this.resetUsage);
 
+            // GA4 settings
+            $('#ga4-replace-creds-btn').on('click', function() {
+                $('#ga4-creds-status').hide();
+                $('#ga4-creds-input').show();
+            });
+
+            $('#save-ga4-settings-btn').on('click', function() {
+                var $btn = $(this);
+                var $result = $('#ga4-settings-result');
+                $btn.prop('disabled', true);
+                $result.text('Saving…');
+
+                $.post(asaeToAdmin.ajaxUrl, {
+                    action: 'asae_to_save_ga4_settings',
+                    nonce: asaeToAdmin.nonce,
+                    property_id: $('#ga4_property_id').val(),
+                    service_account_json: $('#ga4_service_account_json').val()
+                }, function(response) {
+                    $btn.prop('disabled', false);
+                    if (response.success) {
+                        $result.html('<span style="color:#155724;">' + ASAE_TO.escapeHtml(response.data.message) + '</span>');
+                        if ($('#ga4_service_account_json').val()) {
+                            // Reload to show the "configured" state
+                            setTimeout(function() { location.reload(); }, 1000);
+                        }
+                    } else {
+                        $result.html('<span style="color:#721c24;">' + ASAE_TO.escapeHtml(response.data) + '</span>');
+                        $('#ga4-creds-error').text(response.data).show();
+                    }
+                    setTimeout(function() { $result.text(''); }, 5000);
+                }).fail(function() {
+                    $btn.prop('disabled', false);
+                    $result.text('Connection error.');
+                });
+            });
+
+            $('#test-ga4-btn').on('click', function() {
+                var $btn = $(this);
+                var $result = $('#ga4-settings-result');
+                $btn.prop('disabled', true);
+                $result.text('Testing…');
+
+                $.post(asaeToAdmin.ajaxUrl, {
+                    action: 'asae_to_test_ga4_connection',
+                    nonce: asaeToAdmin.nonce
+                }, function(response) {
+                    $btn.prop('disabled', false);
+                    if (response.success) {
+                        $result.html('<span style="color:#155724;">' + ASAE_TO.escapeHtml(response.data.message) + '</span>');
+                    } else {
+                        $result.html('<span style="color:#721c24;">' + ASAE_TO.escapeHtml(response.data) + '</span>');
+                    }
+                    setTimeout(function() { $result.text(''); }, 5000);
+                }).fail(function() {
+                    $btn.prop('disabled', false);
+                    $result.text('Connection error.');
+                });
+            });
+
             $('#cleanup-redundant-tags-btn').on('click', function() {
                 ASAE_TO.startRedundantTagCleanup();
             });

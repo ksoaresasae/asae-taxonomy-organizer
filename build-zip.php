@@ -23,7 +23,7 @@ if ( ! is_dir( dirname( $zipPath ) ) ) {
 }
 
 // Directories and files to exclude from the zip.
-$exclude = [ '.git', '.claude', 'releases', 'instructions', 'node_modules', '.gitignore', 'build-zip.php', 'CLAUDE.md' ];
+$exclude = [ '.git', '.github', '.claude', 'releases', 'instructions', 'node_modules', 'vendor', 'composer.json', 'composer.lock', '.gitignore', 'build-zip.php', 'CLAUDE.md' ];
 
 $zip = new ZipArchive();
 if ( $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) !== true ) {

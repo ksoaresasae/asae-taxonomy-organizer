@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.2.1
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,17 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 
 = 1.0.6 =
 * Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.3.0 =
+* New "Pageviews by Category" report powered by Google Analytics 4 Data API
+* Horizontal bar chart showing real pageview data aggregated by content category
+* Time window selector: Last 3 Months, Last 12 Months, All Time
+* GA4 Configuration on Settings tab: property ID (auto-detects from Site Kit), service account JSON (encrypted storage)
+* Test Connection button validates GA4 API access
+* REST endpoint for chart data with transient caching (24h for 3mo, 7d for 12mo/all)
+* Daily WP-Cron refresh for the 3-month cache
+* Bulk path-to-post resolution via single SQL query (no url_to_postid loops)
+* Multi-category posts counted in each assigned category
 
 = 1.2.1 =
 * Dashboard widget defaults to Last 3 Months instead of All Time

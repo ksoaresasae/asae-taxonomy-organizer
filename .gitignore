@@ -1,2 +1,4 @@
-instructions/
 .claude/
+vendor/
+composer.json
+composer.lock

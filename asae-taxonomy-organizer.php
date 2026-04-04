@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 1.2.1
+ * Version: 1.3.0
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '1.2.1');
+define('ASAE_TO_VERSION', '1.3.0');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -142,6 +142,10 @@ class ASAE_Taxonomy_Organizer {
         // Reports data and rendering
         require_once ASAE_TO_PLUGIN_DIR . 'includes/class-reports.php';
 
+        // GA4 pageviews report
+        require_once ASAE_TO_PLUGIN_DIR . 'includes/class-ga4-reports.php';
+
+
         // Self-hosted GitHub updater
         require_once ASAE_TO_PLUGIN_DIR . 'includes/class-github-updater.php';
     }
@@ -186,6 +190,13 @@ class ASAE_Taxonomy_Organizer {
         add_action('wp_ajax_asae_to_check_updates', array($this, 'ajax_check_updates'));
         add_action('wp_ajax_asae_to_save_report_settings', array($this, 'ajax_save_report_settings'));
         add_action('wp_ajax_asae_to_cleanup_redundant_tags', array($this, 'ajax_cleanup_redundant_tags'));
+
+        // GA4 report handlers
+        add_action('wp_ajax_asae_to_save_ga4_settings', array($this, 'ajax_save_ga4_settings'));
+        add_action('wp_ajax_asae_to_test_ga4_connection', array($this, 'ajax_test_ga4_connection'));
+
+        // GA4 REST endpoint and cron
+        ASAE_TO_GA4_Reports::init();
 
         // AJAX handlers for Reports
         add_action('wp_ajax_asae_to_get_report_categories', array($this, 'ajax_get_report_categories'));
@@ -238,6 +249,7 @@ class ASAE_Taxonomy_Organizer {
     public function deactivate() {
         wp_clear_scheduled_hook('asae_to_process_batch');
         wp_clear_scheduled_hook('asae_to_batch_watchdog');
+        ASAE_TO_GA4_Reports::deactivate();
     }
     
     /**
@@ -435,8 +447,10 @@ class ASAE_Taxonomy_Organizer {
                 true
             );
             wp_localize_script('asae-to-reports', 'asaeToReports', array(
-                'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce'   => wp_create_nonce('asae_to_nonce'),
+                'ajaxUrl'  => admin_url('admin-ajax.php'),
+                'nonce'    => wp_create_nonce('asae_to_nonce'),
+                'restUrl'  => rest_url('ato/v1/'),
+                'restNonce' => wp_create_nonce('wp_rest'),
             ));
         }
 
@@ -846,6 +860,67 @@ class ASAE_Taxonomy_Organizer {
         ASAE_TO_Reports::invalidate_all_caches();
 
         wp_send_json_success(array('message' => __('Report settings saved.', 'asae-taxonomy-organizer')));
+    }
+
+    /**
+     * AJAX: Save GA4 settings (property ID and service account JSON).
+     */
+    public function ajax_save_ga4_settings() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $property_id = isset($_POST['property_id']) ? sanitize_text_field($_POST['property_id']) : '';
+        $json_raw = isset($_POST['service_account_json']) ? wp_unslash($_POST['service_account_json']) : '';
+
+        // Save property ID
+        update_option('ato_ga4_property_id', $property_id);
+
+        // Validate and save service account JSON if provided
+        if (!empty($json_raw)) {
+            $parsed = json_decode($json_raw, true);
+            if ($parsed === null) {
+                wp_send_json_error('Invalid JSON. Please check the format.');
+            }
+
+            $required_keys = array('type', 'project_id', 'private_key', 'client_email');
+            foreach ($required_keys as $key) {
+                if (empty($parsed[$key])) {
+                    wp_send_json_error('Missing required key: ' . $key);
+                }
+            }
+
+            // Encrypt and store
+            $encrypted = ASAE_TO_GA4_Reports::encrypt_credentials($json_raw);
+            update_option('ato_ga4_service_account_json', $encrypted);
+            update_option('ato_ga4_client_email', sanitize_email($parsed['client_email']));
+
+            // Clear caches since config changed
+            ASAE_TO_GA4_Reports::clear_caches();
+        }
+
+        wp_send_json_success(array('message' => __('GA4 settings saved.', 'asae-taxonomy-organizer')));
+    }
+
+    /**
+     * AJAX: Test GA4 connection.
+     */
+    public function ajax_test_ga4_connection() {
+        check_ajax_referer('asae_to_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $result = ASAE_TO_GA4_Reports::test_connection();
+        if (is_wp_error($result)) {
+            wp_send_json_error($result->get_error_message());
+        }
+
+        $property_id = get_option('ato_ga4_property_id', '');
+        wp_send_json_success(array(
+            'message' => sprintf(__('Connected successfully to GA4 property %s.', 'asae-taxonomy-organizer'), $property_id),
+        ));
     }
 
     /**
