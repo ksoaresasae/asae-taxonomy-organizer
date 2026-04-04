@@ -46,9 +46,9 @@ class ASAE_TO_Reports {
                                 <?php endforeach; ?>
                             </select>
                             <select id="asae-to-report-date-range" aria-label="<?php esc_attr_e('Date range', 'asae-taxonomy-organizer'); ?>">
-                                <option value="all" selected><?php _e('All Time', 'asae-taxonomy-organizer'); ?></option>
+                                <option value="3m" selected><?php _e('Last 3 Months', 'asae-taxonomy-organizer'); ?></option>
                                 <option value="12m"><?php _e('Last 12 Months', 'asae-taxonomy-organizer'); ?></option>
-                                <option value="3m"><?php _e('Last 3 Months', 'asae-taxonomy-organizer'); ?></option>
+                                <option value="all"><?php _e('All Time', 'asae-taxonomy-organizer'); ?></option>
                             </select>
                             <button type="button" id="asae-to-report-back" class="button" style="display: none;">
                                 <?php _e('Back to Categories', 'asae-taxonomy-organizer'); ?>
