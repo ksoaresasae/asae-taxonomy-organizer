@@ -3,7 +3,7 @@
  * Plugin Name: ASAE Taxonomy Organizer
  * Plugin URI: https://www.asaecenter.org
  * Description: Use AI to automatically analyze WordPress content and categorize it with appropriate taxonomy terms.
- * Version: 1.3.8
+ * Version: 1.3.9
  * Author: Keith M. Soares
  * Author URI: https://www.asaecenter.org
  * Author Email: ksoares@asaecenter.org
@@ -53,7 +53,7 @@ if (!defined('ABSPATH')) {
 // These constants provide easy access to version info and file paths throughout
 // the plugin. Using constants ensures consistency and makes updates easier.
 
-define('ASAE_TO_VERSION', '1.3.8');
+define('ASAE_TO_VERSION', '1.3.9');
 define('ASAE_TO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ASAE_TO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ASAE_TO_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -447,10 +447,11 @@ class ASAE_Taxonomy_Organizer {
                 true
             );
             wp_localize_script('asae-to-reports', 'asaeToReports', array(
-                'ajaxUrl'  => admin_url('admin-ajax.php'),
-                'nonce'    => wp_create_nonce('asae_to_nonce'),
-                'restUrl'  => rest_url('ato/v1/'),
-                'restNonce' => wp_create_nonce('wp_rest'),
+                'ajaxUrl'       => admin_url('admin-ajax.php'),
+                'nonce'         => wp_create_nonce('asae_to_nonce'),
+                'restUrl'       => rest_url('ato/v1/'),
+                'restNonce'     => wp_create_nonce('wp_rest'),
+                'categoryColors' => ASAE_TO_Reports::get_category_color_map('post'),
             ));
         }
 

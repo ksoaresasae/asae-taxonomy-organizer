@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.3.8
+Stable tag: 1.3.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,12 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 
 = 1.0.6 =
 * Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.3.9 =
+* Consistent category colors across all charts: Content by Category, Pageviews, and dashboard widget
+* Colors assigned alphabetically by category name so each category always has the same color
+* Expanded palette to 14 unique colors to cover all categories without repeating
+* GA4 chart uses the shared color map from ASAE_TO_Reports
 
 = 1.3.8 =
 * Fix: GA4 donut chart was stretched vertically — wrapped canvas in asae-to-chart-wrap container

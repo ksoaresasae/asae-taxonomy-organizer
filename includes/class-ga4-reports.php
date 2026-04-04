@@ -301,16 +301,14 @@ class ASAE_TO_GA4_Reports {
 
         arsort($category_views);
 
-        $palette = array('#648FFF', '#785EF0', '#DC267F', '#FE6100', '#FFB000', '#009E73', '#56B4E9', '#E69F00');
+        $color_map = ASAE_TO_Reports::get_category_color_map('post');
         $categories = array();
-        $i = 0;
         foreach ($category_views as $name => $views) {
             $categories[] = array(
                 'name'  => $name,
                 'views' => $views,
-                'color' => $palette[$i % count($palette)],
+                'color' => isset($color_map[$name]) ? $color_map[$name] : '#ccc',
             );
-            $i++;
         }
 
         return array(

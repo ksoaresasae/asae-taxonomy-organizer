@@ -23,7 +23,41 @@ class ASAE_TO_Reports {
     private static $palette = array(
         '#648FFF', '#785EF0', '#DC267F', '#FE6100',
         '#FFB000', '#009E73', '#56B4E9', '#E69F00',
+        '#4B0082', '#B22222', '#2E8B57', '#CD853F',
+        '#708090', '#8B008B',
     );
+
+    /**
+     * Get a stable color for a category name. Categories are sorted
+     * alphabetically and each gets a fixed palette index so the same
+     * category always has the same color across all charts.
+     *
+     * @param string $post_type
+     * @return array name => color
+     */
+    public static function get_category_color_map($post_type = 'post') {
+        $taxonomy = self::get_primary_taxonomy($post_type);
+        if (!$taxonomy) {
+            return array();
+        }
+
+        $terms = get_terms(array('taxonomy' => $taxonomy, 'hide_empty' => false));
+        if (is_wp_error($terms)) {
+            return array();
+        }
+
+        $names = array();
+        foreach ($terms as $term) {
+            $names[] = $term->name;
+        }
+        sort($names, SORT_STRING | SORT_FLAG_CASE);
+
+        $map = array();
+        foreach ($names as $i => $name) {
+            $map[$name] = self::$palette[$i % count(self::$palette)];
+        }
+        return $map;
+    }
 
     /**
      * Render the Reports tab HTML container.
@@ -153,9 +187,10 @@ class ASAE_TO_Reports {
         }
         $total = (new WP_Query($total_args))->found_posts;
 
+        $color_map = self::get_category_color_map($post_type);
+
         $categories = array();
         $categorized_count = 0;
-        $i = 0;
 
         foreach ($terms as $term) {
             $count = self::count_posts_in_term($post_type, $taxonomy, $term->term_id, $date_range);
@@ -166,22 +201,15 @@ class ASAE_TO_Reports {
                 'term_id' => $term->term_id,
                 'name'    => $term->name,
                 'count'   => $count,
-                'color'   => self::$palette[$i % count(self::$palette)],
+                'color'   => isset($color_map[$term->name]) ? $color_map[$term->name] : '#ccc',
             );
             $categorized_count += $count;
-            $i++;
         }
 
-        // Sort by count descending
+        // Sort by count descending (colors stay with their category)
         usort($categories, function ($a, $b) {
             return $b['count'] - $a['count'];
         });
-
-        // Re-assign colors after sort
-        foreach ($categories as $idx => &$cat) {
-            $cat['color'] = self::$palette[$idx % count(self::$palette)];
-        }
-        unset($cat);
 
         $uncategorized = max(0, $total - $categorized_count);
 
