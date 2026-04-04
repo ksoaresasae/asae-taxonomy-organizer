@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.3.2
+Stable tag: 1.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,11 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 
 = 1.0.6 =
 * Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.3.3 =
+* Fix: PHP fatal error in class-ga4-reports.php — DAY_IN_SECONDS used in static property initializer
+* WordPress constants aren't available during class parsing; replaced with literal values (86400, 604800)
+* This was killing the entire plugin silently, causing all charts to render blank
 
 = 1.3.2 =
 * Fix: Chart.js file was a CDN wrapper placeholder, not the actual library — all charts rendered blank

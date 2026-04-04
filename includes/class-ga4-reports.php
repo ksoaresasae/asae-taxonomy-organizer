@@ -19,9 +19,9 @@ if (!defined('ABSPATH')) {
 class ASAE_TO_GA4_Reports {
 
     private static $windows = array(
-        '3mo'  => array('days' => 90,   'ttl' => DAY_IN_SECONDS,     'key' => 'ato_ga4_views_90d'),
-        '12mo' => array('days' => 365,  'ttl' => 7 * DAY_IN_SECONDS, 'key' => 'ato_ga4_views_1y'),
-        'all'  => array('days' => 1825, 'ttl' => 7 * DAY_IN_SECONDS, 'key' => 'ato_ga4_views_5y'),
+        '3mo'  => array('days' => 90,   'ttl' => 86400,   'key' => 'ato_ga4_views_90d'),
+        '12mo' => array('days' => 365,  'ttl' => 604800,  'key' => 'ato_ga4_views_1y'),
+        'all'  => array('days' => 1825, 'ttl' => 604800,  'key' => 'ato_ga4_views_5y'),
     );
 
     public static function init() {
