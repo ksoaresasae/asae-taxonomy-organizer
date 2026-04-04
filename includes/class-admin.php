@@ -105,19 +105,16 @@ class ASAE_TO_Admin {
                             ); ?>
                         </div>
                     <?php else: ?>
-                        <p>
-                            <button type="button" id="asae-to-ga4-load-btn" class="button button-primary">
-                                <?php _e('Load Pageview Data', 'asae-taxonomy-organizer'); ?>
-                            </button>
-                        </p>
-                        <div class="asae-to-report-body" aria-live="polite" id="asae-to-ga4-body" style="display: none;">
-                            <div id="asae-to-ga4-spinner" class="asae-to-chart-spinner">
-                                <span class="spinner is-active"></span>
+                        <div class="asae-to-report-body" aria-live="polite">
+                            <div class="asae-to-chart-wrap">
+                                <div id="asae-to-ga4-spinner" class="asae-to-chart-spinner">
+                                    <span class="spinner is-active"></span>
+                                </div>
+                                <canvas id="asae-to-ga4-chart"
+                                        role="img"
+                                        aria-label="<?php esc_attr_e('Pageviews by category chart', 'asae-taxonomy-organizer'); ?>"
+                                        style="display: none;"></canvas>
                             </div>
-                            <canvas id="asae-to-ga4-chart"
-                                    role="img"
-                                    aria-label="<?php esc_attr_e('Pageviews by category chart', 'asae-taxonomy-organizer'); ?>"
-                                    style="display: none; max-width: 380px;"></canvas>
                             <div id="asae-to-ga4-table-wrap" class="asae-to-report-table-wrap"></div>
                         </div>
                         <p id="asae-to-ga4-footer" class="description" style="display: none; margin-top: 10px; font-size: 11px; color: #888;">
