@@ -645,10 +645,12 @@
             ASAE_TO_Reports.initDashboard();
         }
 
-        // GA4 pageviews chart
-        if ($('#asae-to-ga4-chart').length) {
+        // GA4 pageviews chart — load on button click only
+        $('#asae-to-ga4-load-btn').on('click', function() {
+            $(this).hide();
+            $('#asae-to-ga4-body').show();
             ASAE_TO_GA4.init();
-        }
+        });
     });
 
 })(jQuery);

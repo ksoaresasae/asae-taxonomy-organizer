@@ -105,7 +105,12 @@ class ASAE_TO_Admin {
                             ); ?>
                         </div>
                     <?php else: ?>
-                        <div class="asae-to-report-body" aria-live="polite">
+                        <p>
+                            <button type="button" id="asae-to-ga4-load-btn" class="button button-primary">
+                                <?php _e('Load Pageview Data', 'asae-taxonomy-organizer'); ?>
+                            </button>
+                        </p>
+                        <div class="asae-to-report-body" aria-live="polite" id="asae-to-ga4-body" style="display: none;">
                             <div id="asae-to-ga4-spinner" class="asae-to-chart-spinner">
                                 <span class="spinner is-active"></span>
                             </div>
