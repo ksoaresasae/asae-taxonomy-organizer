@@ -6,7 +6,7 @@ This is a WordPress plugin. The plugin code lives in the root of this repository
 
 * Name: ASAE Taxonomy Organizer
 * Slug: asae-taxonomy-organizer
-* Version: 1.3.5
+* Version: 1.3.6
 * Author/developer: Keith M. Soares (ksoares@asaecenter.org)
 * Company: ASAE
 * License: GPL v2 or later
@@ -72,7 +72,7 @@ The plugin follows the standard ASAE submenu pattern. It registers at priority 2
 ### Constants
 | Constant | Value |
 |---|---|
-| `ASAE_TO_VERSION` | `'1.3.5'` |
+| `ASAE_TO_VERSION` | `'1.3.6'` |
 | `ASAE_TO_PLUGIN_DIR` | `plugin_dir_path(__FILE__)` |
 | `ASAE_TO_PLUGIN_URL` | `plugin_dir_url(__FILE__)` |
 | `ASAE_TO_PLUGIN_BASENAME` | `plugin_basename(__FILE__)` |
