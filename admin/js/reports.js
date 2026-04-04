@@ -573,34 +573,28 @@
 
             var ctx = $canvas[0].getContext('2d');
             ASAE_TO_GA4.chart = new Chart(ctx, {
-                type: 'bar',
+                type: 'doughnut',
                 data: {
                     labels: labels,
                     datasets: [{
                         data: views,
                         backgroundColor: colors,
-                        borderWidth: 0
+                        borderWidth: 2,
+                        borderColor: '#fff'
                     }]
                 },
                 options: {
-                    indexAxis: 'y',
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: true,
+                    cutout: '45%',
                     plugins: {
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(ctx) {
-                                    return ctx.parsed.x.toLocaleString() + ' views';
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: {
-                                callback: function(val) {
-                                    return val.toLocaleString();
+                                    var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+                                    var pct = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
+                                    return ctx.label + ': ' + ctx.parsed.toLocaleString() + ' views (' + pct + '%)';
                                 }
                             }
                         }
@@ -608,14 +602,9 @@
                 }
             });
 
-            // Set canvas height based on category count
-            var barHeight = 32;
-            var minHeight = 300;
-            $canvas.css('height', Math.max(minHeight, labels.length * barHeight) + 'px');
-
             // Data table
             var html = '<table class="asae-to-report-table" role="table">';
-            html += '<thead><tr><th scope="col">Category</th><th scope="col" class="count-cell">Views</th><th scope="col" class="pct-cell">%</th></tr></thead>';
+            html += '<thead><tr><th scope="col">Category</th><th scope="col" class="count-cell">Pageviews</th><th scope="col" class="pct-cell">%</th></tr></thead>';
             html += '<tbody>';
 
             var total = data.total_views;
@@ -636,7 +625,7 @@
             $('#asae-to-ga4-footer').show();
 
             // Aria label
-            var summary = 'Horizontal bar chart showing pageviews across ' + labels.length + ' categories.';
+            var summary = 'Donut chart showing pageviews across ' + labels.length + ' categories.';
             if (labels.length > 0) {
                 summary += ' Highest: ' + labels[0] + ' with ' + views[0].toLocaleString() + ' views.';
             }

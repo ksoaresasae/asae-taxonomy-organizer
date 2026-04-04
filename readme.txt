@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.3.6
+Stable tag: 1.3.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 
 = 1.0.6 =
 * Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.3.7 =
+* Changed GA4 Pageviews chart from horizontal bar to donut chart matching existing report style
 
 = 1.3.6 =
 * Fix: Chart.js was excluded from release zip — build-zip.php "vendor" exclude matched admin/js/vendor/

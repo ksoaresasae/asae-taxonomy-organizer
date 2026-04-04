@@ -117,7 +117,7 @@ class ASAE_TO_Admin {
                             <canvas id="asae-to-ga4-chart"
                                     role="img"
                                     aria-label="<?php esc_attr_e('Pageviews by category chart', 'asae-taxonomy-organizer'); ?>"
-                                    style="display: none;"></canvas>
+                                    style="display: none; max-width: 380px;"></canvas>
                             <div id="asae-to-ga4-table-wrap" class="asae-to-report-table-wrap"></div>
                         </div>
                         <p id="asae-to-ga4-footer" class="description" style="display: none; margin-top: 10px; font-size: 11px; color: #888;">
