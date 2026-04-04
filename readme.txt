@@ -4,7 +4,7 @@ Tags: taxonomy, categories, ai, automation, content organization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.3.10
+Stable tag: 1.3.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,6 +39,9 @@ Yes! Select "All Items" to use batch processing, which runs in the background us
 
 = 1.0.6 =
 * Fix: color swatch and category/tag name now display inline (no line break between them)
+
+= 1.3.11 =
+* Added rank numbers (#1, #2, etc.) to data tables on both Content by Category and Pageviews charts
 
 = 1.3.10 =
 * Fix: GA4 Pageviews chart still showing old colors — GA4 transient cache was not cleared on upgrade

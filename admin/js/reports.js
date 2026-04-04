@@ -389,7 +389,7 @@
          */
         renderTable: function(labels, counts, colors, total, termIds, drillable, hasOtherDrill) {
             var html = '<table class="asae-to-report-table" role="table">';
-            html += '<thead><tr><th scope="col">Name</th><th scope="col" class="count-cell">Count</th><th scope="col" class="pct-cell">%</th></tr></thead>';
+            html += '<thead><tr><th scope="col" class="rank-cell">#</th><th scope="col">Name</th><th scope="col" class="count-cell">Count</th><th scope="col" class="pct-cell">%</th></tr></thead>';
             html += '<tbody>';
 
             $.each(labels, function(i, label) {
@@ -398,6 +398,7 @@
                 var escapedLabel = $('<span>').text(label).html();
 
                 html += '<tr>';
+                html += '<td class="rank-cell">' + (i + 1) + '</td>';
                 html += '<td>';
                 html += '<span class="color-swatch" style="background:' + colors[i] + ';" aria-hidden="true"></span>';
                 if (isDrillable) {
@@ -604,13 +605,14 @@
 
             // Data table
             var html = '<table class="asae-to-report-table" role="table">';
-            html += '<thead><tr><th scope="col">Category</th><th scope="col" class="count-cell">Pageviews</th><th scope="col" class="pct-cell">%</th></tr></thead>';
+            html += '<thead><tr><th scope="col" class="rank-cell">#</th><th scope="col">Category</th><th scope="col" class="count-cell">Pageviews</th><th scope="col" class="pct-cell">%</th></tr></thead>';
             html += '<tbody>';
 
             var total = data.total_views;
             $.each(data.categories, function(i, cat) {
                 var pct = total > 0 ? Math.round((cat.views / total) * 100) : 0;
                 html += '<tr>';
+                html += '<td class="rank-cell">' + (i + 1) + '</td>';
                 html += '<td><span class="color-swatch" style="background:' + cat.color + ';" aria-hidden="true"></span>';
                 html += '<span class="no-drill" style="text-transform:capitalize;">' + $('<span>').text(cat.name).html() + '</span></td>';
                 html += '<td class="count-cell">' + cat.views.toLocaleString() + '</td>';

@@ -96,6 +96,13 @@
     outline-offset: -2px;
 }
 
+.asae-to-report-table .rank-cell {
+    text-align: center;
+    color: #888;
+    width: 30px;
+    font-variant-numeric: tabular-nums;
+}
+
 .asae-to-report-table .count-cell {
     text-align: right;
     font-variant-numeric: tabular-nums;
